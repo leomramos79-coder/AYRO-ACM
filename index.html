@@ -88,6 +88,37 @@ td input,td select{padding:8px}
 @media(max-width:520px){.content{padding:12px}.formgrid,.kpis,.portal-grid{grid-template-columns:1fr}.statbar{grid-template-columns:1fr}.statbar>div+div{border-left:0;border-top:1px solid var(--line)}}
 @media print{.sidebar,.top,.no-print{display:none!important}.app{display:block}body{background:#fff}.content{padding:0;max-width:none}.page{display:none!important}#page-acm{display:block!important}.card{box-shadow:none;break-inside:avoid}}
 </style>
+
+<!-- AYRO ACM: conexão Supabase -->
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  window.ayroSupabase = null;
+
+  document.addEventListener("DOMContentLoaded", function () {
+    try {
+      if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+        console.warn("AYRO ACM: configuração do Supabase não encontrada.");
+        return;
+      }
+
+      if (!window.supabase || typeof window.supabase.createClient !== "function") {
+        console.warn("AYRO ACM: biblioteca do Supabase não foi carregada.");
+        return;
+      }
+
+      window.ayroSupabase = window.supabase.createClient(
+        window.SUPABASE_URL,
+        window.SUPABASE_ANON_KEY
+      );
+
+      console.info("AYRO ACM: Supabase inicializado.");
+    } catch (error) {
+      console.error("AYRO ACM: erro ao inicializar Supabase:", error);
+    }
+  });
+</script>
+
 </head>
 <body>
 
