@@ -10,7 +10,7 @@ app.get("/", (req, res) => {
   res.json({ status: "AYRO ACM API online" });
 });
 
-app.get("/api/pesquisar", async (req, res) => {
+app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
   try {
     const { q } = req.query;
 
