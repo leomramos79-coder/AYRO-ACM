@@ -43,7 +43,21 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       });
     }
 
-    res.json(dados);
+    const resultados = (dados.organic_results || [])
+  .filter(item => item.link)
+  .map(item => ({
+    titulo: item.title || "",
+    descricao: item.snippet || "",
+    link: item.link || "",
+    fonte: item.source || item.displayed_link || "",
+    preco: item.price || ""
+  }));
+
+res.json({
+  sucesso: true,
+  total: resultados.length,
+  resultados: resultados
+});
 
   } catch (erro) {
     console.error(erro);
