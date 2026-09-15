@@ -434,15 +434,55 @@ function refreshDashboard(){
  const el=document.getElementById('recentList');el.innerHTML=acms.length?acms.slice(0,5).map(a=>`<div class="item"><div><strong>${esc(a.property.owner||a.property.bairro||'Avaliação')}</strong><small>${new Date(a.date).toLocaleDateString('pt-BR')} • ${BRL.format(a.result.market)}</small></div><button class="btn light" onclick="loadACM(${a.id})">Abrir</button></div>`).join(''):'<div class="muted">Nenhuma avaliação salva ainda.</div>';
 }
 function refreshAll(){refreshDashboard();renderHistory();renderClients();renderRows();loadSettings()}
-function openSearches(){
+const AYRO_API_URL='https://ayro-acm-api.onrender.com';
+
+async function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
  const area=document.getElementById('area').value,beds=document.getElementById('beds').value;
  const base=`${type} à venda ${bairro} ${city} ${state} ${beds?beds+' quartos ':''}${area?area+' m² ':''}`.trim();
- const portals=[['OLX','olx.com.br'],['ZAP','zapimoveis.com.br'],['Viva Real','vivareal.com.br'],['Chaves na Mão','chavesnamao.com.br']];
  const win=window.open('','_blank');
  if(win){
-   win.document.write('<!doctype html><meta charset="utf-8"><title>AYRO • Pesquisa de comparáveis</title><style>body{font-family:Arial;padding:30px;max-width:900px;margin:auto}a{display:block;padding:14px;margin:10px 0;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none}small{color:#666}</style><h2>AYRO • Pesquisas de comparáveis</h2><p>Abra os portais abaixo, confira o anúncio e copie o link para a tabela do AYRO.</p>'+portals.map(([name,domain])=>{const u='https://www.google.com/search?q='+encodeURIComponent('site:'+domain+' '+base);return '<a target="_blank" rel="noopener" href="'+u+'"><b>'+name+'</b><br><small>'+base+'</small></a>'}).join(''));
+   win.document.write('<!doctype html><meta charset="utf-8"><title>AYRO • Pesquisa de comparáveis</title><style>body{font-family:Arial;padding:30px;max-width:1000px;margin:auto}a{display:block;padding:14px;margin:10px 0;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none}.muted,small{color:#666}.ok{background:#eef8f0;padding:12px;border-radius:10px}.err{background:#fff1f1;padding:12px;border-radius:10px}</style><h2>AYRO • Pesquisa automática de comparáveis</h2><p class="muted">Consultando a API AYRO...</p>');
    win.document.close();
+ }
+ try{
+   let response=null, data=null, lastError=null;
+   const attempts=[
+     `${AYRO_API_URL}/search?q=${encodeURIComponent(base)}`,
+     `${AYRO_API_URL}/api/search?q=${encodeURIComponent(base)}`
+   ];
+   for(const url of attempts){
+     try{
+       const r=await fetch(url);
+       if(r.ok){ response=r; data=await r.json(); break; }
+       lastError=new Error('HTTP '+r.status);
+     }catch(e){ lastError=e; }
+   }
+   if(!response) throw lastError||new Error('API indisponível');
+
+   const results = data.organic_results || data.results || data.items || data.comparables || [];
+   const normalized = results.map(x=>({
+      title:x.title||x.name||x.source||'Anúncio',
+      link:x.link||x.url||x.href||'',
+      snippet:x.snippet||x.description||x.text||''
+   })).filter(x=>x.link);
+
+   if(win){
+     win.document.body.innerHTML='<h2>AYRO • Comparáveis encontrados</h2>'+
+       '<div class="ok">API conectada: '+normalized.length+' resultado(s) com link.</div>'+
+       (normalized.length ? normalized.map(x=>'<a target="_blank" rel="noopener" href="'+x.link+'"><b>'+esc(x.title)+'</b><br><small>'+esc(x.snippet)+'</small><br><small>'+esc(x.link)+'</small></a>').join('') :
+       '<p class="err">A API respondeu, mas não retornou links neste formato. A pesquisa manual por portais continua disponível abaixo.</p>')+
+       '<h3>Pesquisa manual por portais</h3>'+
+       [['OLX','olx.com.br'],['ZAP','zapimoveis.com.br'],['Viva Real','vivareal.com.br'],['Chaves na Mão','chavesnamao.com.br']].map(([name,domain])=>{
+          const u='https://www.google.com/search?q='+encodeURIComponent('site:'+domain+' '+base);
+          return '<a target="_blank" rel="noopener" href="'+u+'"><b>'+name+'</b><br><small>'+esc(base)+'</small></a>';
+       }).join('');
+   }
+ }catch(err){
+   if(win){
+     win.document.body.innerHTML='<h2>AYRO • Pesquisa de comparáveis</h2><p class="err"><b>Não foi possível consultar a API agora.</b><br>'+esc(String(err.message||err))+'</p>'+
+       '<p>A instância gratuita do Render pode levar alguns segundos para acordar. Tente novamente.</p>';
+   } else alert('Não foi possível consultar a API AYRO: '+err.message);
  }
 }
 function loadDemo(){
