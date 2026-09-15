@@ -36,7 +36,7 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
     const resposta = await fetch(url);
     const dados = await resposta.json();
-
+console.log("SERPAPI DEBUG:", JSON.stringify(dados.organic_results || [], null, 2));
     if (!resposta.ok || dados.error) {
       return res.status(500).json({
         erro: dados.error || "Erro ao consultar a SerpApi."
