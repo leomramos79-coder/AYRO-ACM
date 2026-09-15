@@ -460,6 +460,8 @@ async function openSearches(){
 
    // O backend pode devolver o JSON bruto da SerpApi OU um objeto AYRO que o encapsula.
    const candidates=[
+     data.resultados,
+     data.data?.resultados,
      data.organic_results,
      data.data?.organic_results,
      data.serpapi?.organic_results,
@@ -478,10 +480,12 @@ async function openSearches(){
      let source=x.source||x.source_name||'';
      try{if(!source&&link) source=new URL(link).hostname.replace(/^www\./,'');}catch(_){ }
      return {
-       title:x.title||x.name||x.heading||source||'Anúncio',
+       title:x.titulo||x.title||x.name||x.heading||source||'Anúncio',
        link,
-       snippet:x.snippet||x.description||x.text||x.rich_snippet?.top?.detected_extensions?.price||'',
-       source
+       snippet:x.descricao||x.snippet||x.description||x.text||x.rich_snippet?.top?.detected_extensions?.price||'',
+       source:x.fonte||source,
+       price:x.preco||x.price||'',
+       area:x.area||''
      };
    }).filter(x=>/^https?:\/\//i.test(x.link));
 
