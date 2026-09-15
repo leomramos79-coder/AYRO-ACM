@@ -441,48 +441,63 @@ async function openSearches(){
  const area=document.getElementById('area').value,beds=document.getElementById('beds').value;
  const base=`${type} à venda ${bairro} ${city} ${state} ${beds?beds+' quartos ':''}${area?area+' m² ':''}`.trim();
  const win=window.open('','_blank');
+ const safe=v=>esc(String(v??''));
  if(win){
-   win.document.write('<!doctype html><meta charset="utf-8"><title>AYRO • Pesquisa de comparáveis</title><style>body{font-family:Arial;padding:30px;max-width:1000px;margin:auto}a{display:block;padding:14px;margin:10px 0;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none}.muted,small{color:#666}.ok{background:#eef8f0;padding:12px;border-radius:10px}.err{background:#fff1f1;padding:12px;border-radius:10px}</style><h2>AYRO • Pesquisa automática de comparáveis</h2><p class="muted">Consultando a API AYRO...</p>');
+   win.document.write('<!doctype html><meta charset="utf-8"><title>AYRO • Pesquisa de comparáveis</title><style>body{font-family:Arial;padding:30px;max-width:1050px;margin:auto;background:#fafafa;color:#111}a.result{display:block;padding:15px;margin:10px 0;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none;background:#fff}.muted,small{color:#666}.ok{background:#eef8f0;padding:12px;border-radius:10px}.err{background:#fff1f1;padding:12px;border-radius:10px}.src{font-weight:700;color:#8a6d1d}.url{word-break:break-all}</style><h2>AYRO • Pesquisa automática de comparáveis</h2><p class="muted">Consultando a API AYRO...</p>');
    win.document.close();
  }
  try{
-   let response=null, data=null, lastError=null;
-   const attempts=[
-     `${AYRO_API_URL}/search?q=${encodeURIComponent(base)}`,
-     `${AYRO_API_URL}/api/search?q=${encodeURIComponent(base)}`
-   ];
-   for(const url of attempts){
+   let data=null,lastError=null;
+   for(const path of ['/search','/api/search','/api/pesquisar']){
      try{
-       const r=await fetch(url);
-       if(r.ok){ response=r; data=await r.json(); break; }
-       lastError=new Error('HTTP '+r.status);
-     }catch(e){ lastError=e; }
+       const r=await fetch(`${AYRO_API_URL}${path}?q=${encodeURIComponent(base)}`,{headers:{'Accept':'application/json'}});
+       if(!r.ok){lastError=new Error(`HTTP ${r.status} em ${path}`);continue;}
+       data=await r.json();
+       if(data) break;
+     }catch(e){lastError=e;}
    }
-   if(!response) throw lastError||new Error('API indisponível');
+   if(!data) throw lastError||new Error('API indisponível');
 
-   const results = data.organic_results || data.results || data.items || data.comparables || [];
-   const normalized = results.map(x=>({
-      title:x.title||x.name||x.source||'Anúncio',
-      link:x.link||x.url||x.href||'',
-      snippet:x.snippet||x.description||x.text||''
-   })).filter(x=>x.link);
+   // O backend pode devolver o JSON bruto da SerpApi OU um objeto AYRO que o encapsula.
+   const candidates=[
+     data.organic_results,
+     data.data?.organic_results,
+     data.serpapi?.organic_results,
+     data.search?.organic_results,
+     data.google?.organic_results,
+     data.results,
+     data.data?.results,
+     data.items,
+     data.comparables
+   ];
+   let results=candidates.find(Array.isArray)||[];
+   if(!results.length && Array.isArray(data)) results=data;
+
+   const normalized=results.map(x=>{
+     const link=x.link||x.url||x.href||x.redirect_link||x.displayed_link||x.source_info?.link||x.about_page_link||'';
+     let source=x.source||x.source_name||'';
+     try{if(!source&&link) source=new URL(link).hostname.replace(/^www\./,'');}catch(_){ }
+     return {
+       title:x.title||x.name||x.heading||source||'Anúncio',
+       link,
+       snippet:x.snippet||x.description||x.text||x.rich_snippet?.top?.detected_extensions?.price||'',
+       source
+     };
+   }).filter(x=>/^https?:\/\//i.test(x.link));
 
    if(win){
-     win.document.body.innerHTML='<h2>AYRO • Comparáveis encontrados</h2>'+
-       '<div class="ok">API conectada: '+normalized.length+' resultado(s) com link.</div>'+
-       (normalized.length ? normalized.map(x=>'<a target="_blank" rel="noopener" href="'+x.link+'"><b>'+esc(x.title)+'</b><br><small>'+esc(x.snippet)+'</small><br><small>'+esc(x.link)+'</small></a>').join('') :
-       '<p class="err">A API respondeu, mas não retornou links neste formato. A pesquisa manual por portais continua disponível abaixo.</p>')+
-       '<h3>Pesquisa manual por portais</h3>'+
-       [['OLX','olx.com.br'],['ZAP','zapimoveis.com.br'],['Viva Real','vivareal.com.br'],['Chaves na Mão','chavesnamao.com.br']].map(([name,domain])=>{
-          const u='https://www.google.com/search?q='+encodeURIComponent('site:'+domain+' '+base);
-          return '<a target="_blank" rel="noopener" href="'+u+'"><b>'+name+'</b><br><small>'+esc(base)+'</small></a>';
-       }).join('');
+     const cards=normalized.map(x=>'<a class="result" target="_blank" rel="noopener noreferrer" href="'+safe(x.link)+'"><span class="src">'+safe(x.source)+'</span><br><b>'+safe(x.title)+'</b><br><small>'+safe(x.snippet)+'</small><br><small class="url">'+safe(x.link)+'</small></a>').join('');
+     const manual=[['OLX','olx.com.br'],['ZAP','zapimoveis.com.br'],['Viva Real','vivareal.com.br'],['Chaves na Mão','chavesnamao.com.br']].map(([name,domain])=>{
+       const u='https://www.google.com/search?q='+encodeURIComponent('site:'+domain+' '+base);
+       return '<a class="result" target="_blank" rel="noopener noreferrer" href="'+u+'"><b>'+name+'</b><br><small>'+safe(base)+'</small></a>';
+     }).join('');
+     win.document.body.innerHTML='<h2>AYRO • Comparáveis encontrados</h2><div class="ok">API conectada: '+normalized.length+' resultado(s) com link real.</div>'+
+       (normalized.length?cards:'<p class="err"><b>A API respondeu, porém nenhum link HTTP válido foi encontrado no retorno.</b></p>')+
+       '<h3>Pesquisa manual por portais</h3>'+manual;
    }
  }catch(err){
-   if(win){
-     win.document.body.innerHTML='<h2>AYRO • Pesquisa de comparáveis</h2><p class="err"><b>Não foi possível consultar a API agora.</b><br>'+esc(String(err.message||err))+'</p>'+
-       '<p>A instância gratuita do Render pode levar alguns segundos para acordar. Tente novamente.</p>';
-   } else alert('Não foi possível consultar a API AYRO: '+err.message);
+   if(win) win.document.body.innerHTML='<h2>AYRO • Pesquisa de comparáveis</h2><p class="err"><b>Não foi possível consultar a API agora.</b><br>'+safe(err.message||err)+'</p><p>A instância gratuita do Render pode levar alguns segundos para iniciar. Tente novamente.</p>';
+   else alert('Não foi possível consultar a API AYRO: '+err.message);
  }
 }
 function loadDemo(){
