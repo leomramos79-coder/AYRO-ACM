@@ -44,31 +44,7 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
     }
 
     const resultados = (dados.organic_results || [])
-  .filter(item => {
-    if (!item.link) return false;
-
-    const texto = `${item.title || ""} ${item.snippet || ""}`.toLowerCase();
-
-    // Mantém resultados com características de anúncio imobiliário
-    const pareceImovel =
-      texto.includes("imóvel") ||
-      texto.includes("apartamento") ||
-      texto.includes("casa") ||
-      texto.includes("cobertura") ||
-      texto.includes("terreno") ||
-      texto.includes("quarto") ||
-      texto.includes("dormitório") ||
-      texto.includes("m²") ||
-      texto.includes("venda");
-
-    // Remove resultados que normalmente não servem como comparáveis
-    const indesejado =
-      item.link.includes("youtube.com") ||
-      item.link.includes("facebook.com") ||
-      item.link.includes("instagram.com");
-
-    return pareceImovel && !indesejado;
-  })
+  
   .map(item => {
     const texto = `${item.title || ""} ${item.snippet || ""}`;
 
