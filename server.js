@@ -166,7 +166,17 @@ const comparavelValido =
   quartosOk &&
   areaOk &&
   !social &&
-  !paginaColetiva;
+  !paginaColetiva;console.log("DIAGNOSTICO AYRO", {
+  titulo,
+  temPreco,
+  temArea,
+  tipoOk,
+  quartosOk,
+  areaOk,
+  social,
+  paginaColetiva,
+  comparavelValido
+});
         return {
           titulo: titulo,
           descricao: descricao,
