@@ -83,6 +83,16 @@ td input,td select{padding:8px}
 .notice{padding:12px 13px;border-radius:11px;background:#fff9e8;border:1px solid #f1dfaa;font-size:12px;color:#69510c;line-height:1.5}
 .brand-preview{background:#0c0c0c;border-radius:14px;padding:18px;text-align:center}
 .brand-preview img{width:230px;max-width:80%}
+
+.subscription-box{margin-top:16px;padding:16px;border:1px solid #e6cf8b;border-radius:14px;background:linear-gradient(180deg,#fffaf0,#fff)}
+.subscription-box h3{margin:0 0 5px;font-size:16px}
+.subscription-price{font-size:27px;font-weight:900;color:#111;margin:6px 0 2px}
+.subscription-price small{font-size:12px;color:var(--muted);font-weight:700}
+.subscription-features{font-size:12px;color:#555;line-height:1.65;margin:8px 0 12px}
+.subscription-status{display:none;margin-top:10px;padding:10px;border-radius:9px;font-size:12px;line-height:1.45}
+.subscription-status.ok{display:block;background:#e9f7ef;color:#12633d;border:1px solid #bfe5ce}
+.subscription-status.err{display:block;background:#fff0ef;color:#9b1c14;border:1px solid #ffd3cf}
+
 @media(max-width:1050px){.app{grid-template-columns:1fr}.sidebar{display:none}.formgrid{grid-template-columns:repeat(2,1fr)}.kpis{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.login{grid-template-columns:1fr}.login-hero{display:none}.s8,.s7,.s6,.s5,.s4,.s3{grid-column:span 12}.portal-grid{grid-template-columns:repeat(2,1fr)}table{display:block;overflow:auto;white-space:nowrap}}
 @media(max-width:520px){.content{padding:12px}.formgrid,.kpis,.portal-grid{grid-template-columns:1fr}.statbar{grid-template-columns:1fr}.statbar>div+div{border-left:0;border-top:1px solid var(--line)}}
@@ -128,7 +138,14 @@ function initAyroSupabase(){
   <input id="confirmNewPassword" type="password" autocomplete="new-password" placeholder="Repita a nova senha">
   <button class="btn gold full" style="margin-top:12px" onclick="saveNewPassword()">Salvar nova senha</button>
 </div></div>
-      <div class="notice" style="margin-top:14px">Nesta versão, o login é demonstrativo e os dados ficam salvos neste navegador. Para comercialização real, o próximo passo é conectar autenticação e banco de dados em nuvem.</div>
+      <div class="subscription-box">
+        <h3>Ainda não é assinante?</h3>
+        <div class="muted">Assine o AYRO ACM Pro e conclua o pagamento com segurança pelo Mercado Pago.</div>
+        <div class="subscription-price">R$ 49,90 <small>/ mês</small></div>
+        <div class="subscription-features">✓ ACM profissional &nbsp; ✓ Comparáveis &nbsp; ✓ Histórico &nbsp; ✓ PDF para cliente</div>
+        <button id="subscribeBtn" class="btn gold full" type="button" onclick="criarAssinatura()">Assinar AYRO ACM Pro</button>
+        <div id="subscriptionStatus" class="subscription-status"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -328,6 +345,57 @@ async function getOwnProfile(client,user){
     .eq('id',user.id).single();
   if(error) throw error;
   return data;
+}
+
+
+const AYRO_API_URL='https://ayro-acm-api.onrender.com';
+
+function setSubscriptionStatus(message,type=''){
+  const el=document.getElementById('subscriptionStatus');
+  if(!el)return;
+  el.textContent=message||'';
+  el.className='subscription-status'+(type?' '+type:'');
+}
+
+async function criarAssinatura(){
+  const email=document.getElementById('loginEmail').value.trim().toLowerCase();
+  if(!email){
+    setSubscriptionStatus('Digite seu e-mail acima antes de assinar.','err');
+    document.getElementById('loginEmail').focus();
+    return;
+  }
+
+  const btn=document.getElementById('subscribeBtn');
+  const original=btn.textContent;
+  btn.disabled=true;
+  btn.textContent='Criando assinatura...';
+  setSubscriptionStatus('');
+
+  try{
+    const response=await fetch(`${AYRO_API_URL}/api/mercadopago/criar-assinatura`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email})
+    });
+
+    let data={};
+    try{ data=await response.json(); }catch(_){}
+
+    if(!response.ok){
+      throw new Error(data?.detalhes?.message || data?.erro || data?.message || 'Não foi possível criar a assinatura.');
+    }
+
+    const checkoutUrl=data.checkout_url || data.init_point || data.sandbox_init_point;
+    if(!checkoutUrl) throw new Error('O Mercado Pago não retornou o link de pagamento.');
+
+    setSubscriptionStatus('Assinatura criada. Abrindo o Mercado Pago...','ok');
+    window.location.href=checkoutUrl;
+  }catch(err){
+    console.error(err);
+    setSubscriptionStatus(err.message || 'Erro ao conectar com o Mercado Pago. Tente novamente.','err');
+    btn.disabled=false;
+    btn.textContent=original;
+  }
 }
 
 async function login(){
