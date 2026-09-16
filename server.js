@@ -218,8 +218,7 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
             /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i
               .test(titulo);
 
-          // Mantém exatamente a lógica
-          // da versão que encontrou comparáveis
+          // Mantém a lógica dos comparáveis
           const comparavelValido =
             Boolean(item.link) &&
             temPreco &&
@@ -300,8 +299,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
     // =========================================
     // COMPARÁVEIS
-    // REMOVE APENAS DUPLICIDADE APARENTE
-    // NÃO ALTERA O FILTRO ORIGINAL
     // =========================================
 
     const chavesComparaveis =
@@ -331,8 +328,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
             .replace(/\s+/g, "")
             .toLowerCase();
 
-        // Só remove duplicidade quando
-        // preço E área estão identificados
         if (
           precoChave &&
           areaChave
@@ -399,103 +394,62 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 });
 
 
-// =====================================================
+// =========================================
 // MERCADO PAGO - ASSINATURA AYRO ACM PRO
-// R$ 49,90 POR MÊS
-// =====================================================
+// Plano: R$ 49,90 por mês
+// =========================================
 
 app.post("/api/mercadopago/criar-assinatura", async (req, res) => {
-
   try {
-
-    const accessToken =
-      process.env.MERCADOPAGO_ACCESS_TOKEN;
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 
     if (!accessToken) {
-
       return res.status(500).json({
-        erro:
-          "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+        erro: "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
       });
-
     }
 
-    const { email } =
-      req.body || {};
+    const { email } = req.body || {};
 
     if (!email) {
-
       return res.status(400).json({
-        erro:
-          "Informe o e-mail do cliente."
+        erro: "Informe o e-mail do cliente."
       });
-
     }
 
+    const baseUrl = "https://ayro-acm.onrender.com";
+
     const assinatura = {
-
-      reason:
-        "AYRO ACM Pro",
-
-      external_reference:
-        `AYRO-${Date.now()}`,
-
-      payer_email:
-        email,
+      reason: "AYRO ACM Pro",
+      external_reference: `AYRO-${Date.now()}`,
+      payer_email: email,
 
       auto_recurring: {
-
-        frequency:
-          1,
-
-        frequency_type:
-          "months",
-
-        transaction_amount:
-          49.90,
-
-        currency_id:
-          "BRL"
-
+        frequency: 1,
+        frequency_type: "months",
+        transaction_amount: 49.90,
+        currency_id: "BRL"
       },
 
-      back_url:
-        "https://ayro-acm.onrender.com",
-
-      status:
-        "pending"
-
+      back_url: baseUrl,
+      status: "pending"
     };
 
+    const resposta = await fetch(
+      "https://api.mercadopago.com/preapproval",
+      {
+        method: "POST",
 
-    const resposta =
-      await fetch(
-        "https://api.mercadopago.com/preapproval",
-        {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
 
-          method:
-            "POST",
+        body: JSON.stringify(assinatura)
+      }
+    );
 
-          headers: {
-
-            "Authorization":
-              `Bearer ${accessToken}`,
-
-            "Content-Type":
-              "application/json"
-
-          },
-
-          body:
-            JSON.stringify(assinatura)
-
-        }
-      );
-
-
-    const dados =
-      await resposta.json();
-
+    const dados = await resposta.json();
 
     if (!resposta.ok) {
 
@@ -507,22 +461,16 @@ app.post("/api/mercadopago/criar-assinatura", async (req, res) => {
       return res
         .status(resposta.status)
         .json({
-
           erro:
             "Não foi possível criar a assinatura.",
 
           detalhes:
             dados
-
         });
-
     }
 
-
     return res.json({
-
-      sucesso:
-        true,
+      sucesso: true,
 
       assinatura_id:
         dados.id,
@@ -532,9 +480,7 @@ app.post("/api/mercadopago/criar-assinatura", async (req, res) => {
 
       checkout_url:
         dados.init_point
-
     });
-
 
   } catch (erro) {
 
@@ -544,20 +490,137 @@ app.post("/api/mercadopago/criar-assinatura", async (req, res) => {
     );
 
     return res.status(500).json({
-
       erro:
         "Erro interno ao criar assinatura."
-
     });
-
   }
-
 });
 
 
-// =====================================================
-// SERVIDOR
-// =====================================================
+// =========================================
+// MERCADO PAGO - CONSULTAR ASSINATURA
+// DIAGNÓSTICO
+// =========================================
+
+app.get(
+  "/api/mercadopago/consultar-assinatura/:id",
+  async (req, res) => {
+
+    try {
+
+      const accessToken =
+        process.env.MERCADOPAGO_ACCESS_TOKEN;
+
+      if (!accessToken) {
+
+        return res.status(500).json({
+          erro:
+            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+        });
+      }
+
+      const { id } =
+        req.params;
+
+      if (!id) {
+
+        return res.status(400).json({
+          erro:
+            "ID da assinatura não informado."
+        });
+      }
+
+      const resposta =
+        await fetch(
+          `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+          {
+            method: "GET",
+
+            headers: {
+              "Authorization":
+                `Bearer ${accessToken}`,
+
+              "Content-Type":
+                "application/json"
+            }
+          }
+        );
+
+      const dados =
+        await resposta.json();
+
+      if (!resposta.ok) {
+
+        console.error(
+          "Erro ao consultar assinatura:",
+          dados
+        );
+
+        return res
+          .status(resposta.status)
+          .json({
+            erro:
+              "Não foi possível consultar a assinatura.",
+
+            detalhes:
+              dados
+          });
+      }
+
+      return res.json({
+
+        sucesso: true,
+
+        id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        reason:
+          dados.reason,
+
+        payer_email:
+          dados.payer_email,
+
+        external_reference:
+          dados.external_reference,
+
+        init_point:
+          dados.init_point,
+
+        back_url:
+          dados.back_url,
+
+        auto_recurring:
+          dados.auto_recurring,
+
+        date_created:
+          dados.date_created,
+
+        last_modified:
+          dados.last_modified
+      });
+
+    } catch (erro) {
+
+      console.error(
+        "Erro ao consultar assinatura Mercado Pago:",
+        erro
+      );
+
+      return res.status(500).json({
+        erro:
+          "Erro interno ao consultar a assinatura."
+      });
+    }
+  }
+);
+
+
+// =========================================
+// INICIAR SERVIDOR
+// =========================================
 
 const PORT =
   process.env.PORT || 3000;
