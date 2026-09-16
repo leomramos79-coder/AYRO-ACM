@@ -28,42 +28,40 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       });
     }
 
-    // Faz consultas complementares para aumentar a chance de encontrar anúncios individuais.
+    // Faz consultas complementares para aumentar a chance
+    // de encontrar anúncios individuais.
     const consultas = [
       q,
-      q + ' "R$" "m²" -youtube -instagram -facebook -tiktok',
-      q + ' imóvel à venda anúncio "R$" "m²" -youtube -instagram -facebook -tiktok'
+      q + ' imóvel à venda anúncio preço R$ m²',
+      q + ' apartamento venda',
+      q + ' site:zapimoveis.com.br OR site:vivareal.com.br OR site:imovelweb.com.br OR site:casamineira.com.br'
     ];
 
-    const lotes = await Promise.all(
-      consultas.map(async (consulta) => {
-        const url =
-          "https://serpapi.com/search.json?engine=google" +
-          "&q=" + encodeURIComponent(consulta) +
-          "&location=Brazil" +
-          "&hl=pt-br" +
-          "&gl=br" +
-          "&num=20" +
-          "&api_key=" + encodeURIComponent(apiKey);
+    const respostas = [];
 
-        const resposta = await fetch(url);
-        const dadosBusca = await resposta.json();
+    for (const consulta of consultas) {
+      const buscaOtimizada =
+        consulta +
+        ' -youtube -instagram -facebook -tiktok';
 
-        if (!resposta.ok || dadosBusca.error) {
-          throw new Error(
-            dadosBusca.error || "Erro ao consultar a SerpApi."
-          );
-        }
+      const url =
+        "https://serpapi.com/search.json?engine=google" +
+        "&q=" + encodeURIComponent(buscaOtimizada) +
+        "&location=Brazil" +
+        "&hl=pt-br" +
+        "&gl=br" +
+        "&num=20" +
+        "&api_key=" + encodeURIComponent(apiKey);
 
-        return dadosBusca.organic_results || [];
-      })
-    );
+      const resposta = await fetch(url);
+      const dados = await resposta.json();
 
-    const dados = {
-      organic_results: lotes.flat()
-    };
+      if (resposta.ok && !dados.error) {
+        respostas.push(...(dados.organic_results || []));
+      }
+    }
 
-    // Identifica o imóvel pesquisado
+    // Identifica tipo do imóvel
     const tipoBusca =
       /apartamento|apto/i.test(q)
         ? "apartamento"
@@ -71,14 +69,16 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         ? "casa"
         : "";
 
+    // Identifica quartos
     const quartosMatch =
-      q.match(/(\d+)\s*quartos?/i);
+      q.match(/(\d+)\s*(?:quartos?|dormitórios?)/i);
 
     const quartosBusca =
       quartosMatch
         ? Number(quartosMatch[1])
         : null;
 
+    // Identifica área pesquisada
     const areaMatch =
       q.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i);
 
@@ -87,194 +87,184 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         ? Number(areaMatch[1].replace(",", "."))
         : null;
 
-    const resultados =
-      (dados.organic_results || [])
-        .map(item => {
+    const resultados = respostas
+      .map(item => {
 
-          const titulo =
-            item.title || "";
+        const titulo = item.title || "";
+        const descricao = item.snippet || "";
 
-          const descricao =
-            item.snippet || "";
+        const texto = `${titulo} ${descricao}`;
 
-          const texto =
-            `${titulo} ${descricao}`;
+        // PREÇOS
+        const precos =
+          texto.match(/R\$\s?[\d.]+(?:,\d{2})?/g) || [];
 
-          const precos =
-            texto.match(
-              /R\$\s?[\d.]+(?:,\d{2})?/g
-            ) || [];
+        const precosValidos =
+          precos.filter(p => {
 
-          const areas =
-            texto.match(
-              /\d+(?:[.,]\d+)?\s?m²/gi
-            ) || [];
+            const valor =
+              Number(
+                p
+                  .replace(/R\$\s?/i, "")
+                  .replace(/\./g, "")
+                  .replace(",", ".")
+                  .trim()
+              );
 
-          // Evita confundir preço do imóvel com condomínio/IPTU
-          const precosValidos =
-            precos.filter(p => {
+            // evita condomínio/IPTU
+            return valor >= 50000;
+          });
 
-              const valor =
-                Number(
-                  p
+        const preco =
+          item.price ||
+          precosValidos[0] ||
+          "";
+
+        // ÁREA
+        const areas =
+          texto.match(/\d+(?:[.,]\d+)?\s?m²/gi) || [];
+
+        const area =
+          areas[0] || "";
+
+        const areaResultado =
+          area
+            ? Number(
+                area
+                  .replace(/m²/i, "")
+                  .trim()
+                  .replace(",", ".")
+              )
+            : null;
+
+        // TIPO
+        let tipoOk = true;
+
+        if (tipoBusca === "apartamento") {
+          tipoOk =
+            /apartamento|apto|flat|studio/i.test(texto) &&
+            !/\bcasa\b/i.test(texto);
+        }
+
+        if (tipoBusca === "casa") {
+          tipoOk =
+            /\bcasa\b|sobrado/i.test(texto) &&
+            !/apartamento|apto/i.test(texto);
+        }
+
+        // QUARTOS
+        let quartosOk = true;
+
+        if (quartosBusca) {
+
+          const regexQuartos =
+            new RegExp(
+              "\\b" +
+              quartosBusca +
+              "\\s*(?:quartos?|dormitórios?)",
+              "i"
+            );
+
+          quartosOk =
+            regexQuartos.test(texto);
+
+          // Alguns portais escrevem "2 quartos2 ban"
+          if (!quartosOk) {
+            quartosOk =
+              new RegExp(
+                "\\b" +
+                quartosBusca +
+                "\\s*(?:quartos?|dorm)",
+                "i"
+              ).test(texto);
+          }
+        }
+
+        // ÁREA
+        let areaOk = true;
+
+        if (areaBusca && areaResultado) {
+
+          const diferenca =
+            Math.abs(
+              areaResultado - areaBusca
+            ) / areaBusca;
+
+          // tolerância de 35%
+          areaOk =
+            diferenca <= 0.35;
+        }
+
+        // REDES SOCIAIS
+        const social =
+          /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i
+            .test(item.link || "");
+
+        const temPreco =
+          Boolean(preco);
+
+        const temArea =
+          Boolean(areaResultado);
+
+        // PÁGINAS COLETIVAS
+        const paginaColetiva =
+          /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
+            .test(texto) ||
+
+          /imóveis\s+(?:para|à)\s+venda/i
+            .test(titulo) ||
+
+          /\b(?:lista|listagem|busca|pesquisa)\b/i
+            .test(titulo);
+
+        const comparavelValido =
+          Boolean(item.link) &&
+          temPreco &&
+          temArea &&
+          tipoOk &&
+          quartosOk &&
+          areaOk &&
+          !social &&
+          !paginaColetiva;
+
+        return {
+          titulo: titulo,
+          descricao: descricao,
+          link: item.link || "",
+
+          fonte:
+            item.source ||
+            item.displayed_link ||
+            "",
+
+          preco: preco,
+          area: area,
+
+          preco_valor:
+            preco
+              ? Number(
+                  preco
                     .replace(/R\$\s?/i, "")
                     .replace(/\./g, "")
                     .replace(",", ".")
                     .trim()
-                );
-
-              return valor >= 50000;
-            });
-
-          const preco =
-            item.price ||
-            precosValidos[0] ||
-            "";
-
-          const area =
-            areas[0] || "";
-
-          const areaResultado =
-            area
-              ? Number(
-                  area
-                    .replace(/m²/i, "")
-                    .trim()
-                    .replace(",", ".")
                 )
-              : null;
+              : null,
 
-          // Confere o tipo do imóvel
-          let tipoOk = true;
+          area_valor:
+            areaResultado,
 
-          if (tipoBusca === "apartamento") {
-            tipoOk =
-              /apartamento|apto|flat|studio/i
-                .test(texto) &&
-              !/\bcasa\b/i.test(texto);
-          }
+          comparavel_valido:
+            comparavelValido
+        };
+      })
+      .filter(item => item.link);
 
-          if (tipoBusca === "casa") {
-            tipoOk =
-              /\bcasa\b|sobrado/i
-                .test(texto) &&
-              !/apartamento|apto/i
-                .test(texto);
-          }
+    // =====================================================
+    // REMOVE LINKS EXATAMENTE DUPLICADOS
+    // =====================================================
 
-          // Confere quartos
-          let quartosOk = true;
-
-          if (quartosBusca) {
-
-            const regexQuartos =
-              new RegExp(
-                "\\b" +
-                quartosBusca +
-                "\\s*(?:quartos?|dormitórios?)",
-                "i"
-              );
-
-            quartosOk =
-              regexQuartos.test(texto);
-          }
-
-          // Confere área
-          let areaOk = true;
-
-          if (
-            areaBusca &&
-            areaResultado
-          ) {
-
-            const diferenca =
-              Math.abs(
-                areaResultado -
-                areaBusca
-              ) /
-              areaBusca;
-
-            // tolerância máxima de 35%
-            areaOk =
-              diferenca <= 0.35;
-          }
-
-          // Exclui redes sociais
-          const social =
-            /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i
-              .test(item.link || "");
-
-          // Só aceita como comparável anúncio com dados suficientes
-          const temPreco =
-            Boolean(preco);
-
-          const temArea =
-            Boolean(areaResultado);
-
-          // Identifica páginas coletivas/listagens
-          const paginaColetiva =
-            /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
-              .test(texto) ||
-
-            /imóveis\s+(?:para|à)\s+venda/i
-              .test(titulo) ||
-
-            /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i
-              .test(titulo) ||
-
-            /\b(?:lista|listagem|busca|pesquisa)\b/i
-              .test(titulo);
-
-          const comparavelValido =
-            Boolean(item.link) &&
-            temPreco &&
-            temArea &&
-            tipoOk &&
-            quartosOk &&
-            areaOk &&
-            !social &&
-            !paginaColetiva;
-
-          return {
-            titulo: titulo,
-
-            descricao: descricao,
-
-            link:
-              item.link || "",
-
-            fonte:
-              item.source ||
-              item.displayed_link ||
-              "",
-
-            preco: preco,
-
-            area: area,
-
-            preco_valor:
-              preco
-                ? Number(
-                    preco
-                      .replace(/R\$\s?/i, "")
-                      .replace(/\./g, "")
-                      .replace(",", ".")
-                      .trim()
-                  )
-                : null,
-
-            area_valor:
-              areaResultado,
-
-            comparavel_valido:
-              comparavelValido
-          };
-        })
-        .filter(item => item.link);
-
-    // Remove links duplicados
-    const linksVistos =
-      new Set();
+    const linksVistos = new Set();
 
     const resultadosUnicos =
       resultados.filter(item => {
@@ -284,38 +274,76 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
             .split("?")[0]
             .replace(/\/$/, "");
 
-        if (
-          linksVistos.has(linkLimpo)
-        ) {
+        if (linksVistos.has(linkLimpo)) {
           return false;
         }
 
-        linksVistos.add(
-          linkLimpo
-        );
+        linksVistos.add(linkLimpo);
 
         return true;
       });
 
-    // Comparáveis aprovados pelo filtro
+    // =====================================================
+    // REMOVE O MESMO IMÓVEL REPETIDO
+    // MESMA FONTE + PREÇO + ÁREA
+    // =====================================================
+
+    const imoveisVistos =
+      new Set();
+
+    const resultadosSemDuplicados =
+      resultadosUnicos.filter(item => {
+
+        // Referências sem preço/área continuam aparecendo
+        if (
+          !item.preco_valor ||
+          !item.area_valor
+        ) {
+          return true;
+        }
+
+        const fonte =
+          String(item.fonte || "")
+            .toLowerCase()
+            .trim();
+
+        const chave =
+          fonte +
+          "|" +
+          item.preco_valor +
+          "|" +
+          item.area_valor;
+
+        if (imoveisVistos.has(chave)) {
+          return false;
+        }
+
+        imoveisVistos.add(chave);
+
+        return true;
+      });
+
+    // COMPARÁVEIS
     const comparaveis =
-      resultadosUnicos.filter(
+      resultadosSemDuplicados.filter(
         item =>
           item.comparavel_valido
       );
 
-    // Resultados encontrados que não passaram pelo filtro
+    // REFERÊNCIAS
     const referencias =
-      resultadosUnicos.filter(
+      resultadosSemDuplicados.filter(
         item =>
           !item.comparavel_valido
       );
 
+    // RESPOSTA DA API
     res.json({
+
       sucesso: true,
 
       total:
-        resultadosUnicos.length,
+        resultadosSemDuplicados.length,
 
       total_comparaveis:
         comparaveis.length,
@@ -326,14 +354,17 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       referencias:
         referencias,
 
-      // Mantido para o index.html atual continuar funcionando
+      // Mantido para o index.html
       resultados:
-        resultadosUnicos
+        resultadosSemDuplicados
     });
 
   } catch (erro) {
 
-    console.error(erro);
+    console.error(
+      "ERRO AYRO:",
+      erro
+    );
 
     res.status(500).json({
       erro:
@@ -350,4 +381,5 @@ app.listen(PORT, () => {
   console.log(
     `AYRO ACM API rodando na porta ${PORT}`
   );
+
 });
