@@ -398,6 +398,167 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
   }
 });
 
+
+// =====================================================
+// MERCADO PAGO - ASSINATURA AYRO ACM PRO
+// R$ 49,90 POR MÊS
+// =====================================================
+
+app.post("/api/mercadopago/criar-assinatura", async (req, res) => {
+
+  try {
+
+    const accessToken =
+      process.env.MERCADOPAGO_ACCESS_TOKEN;
+
+    if (!accessToken) {
+
+      return res.status(500).json({
+        erro:
+          "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+      });
+
+    }
+
+    const { email } =
+      req.body || {};
+
+    if (!email) {
+
+      return res.status(400).json({
+        erro:
+          "Informe o e-mail do cliente."
+      });
+
+    }
+
+    const assinatura = {
+
+      reason:
+        "AYRO ACM Pro",
+
+      external_reference:
+        `AYRO-${Date.now()}`,
+
+      payer_email:
+        email,
+
+      auto_recurring: {
+
+        frequency:
+          1,
+
+        frequency_type:
+          "months",
+
+        transaction_amount:
+          49.90,
+
+        currency_id:
+          "BRL"
+
+      },
+
+      back_url:
+        "https://ayro-acm.onrender.com",
+
+      status:
+        "pending"
+
+    };
+
+
+    const resposta =
+      await fetch(
+        "https://api.mercadopago.com/preapproval",
+        {
+
+          method:
+            "POST",
+
+          headers: {
+
+            "Authorization":
+              `Bearer ${accessToken}`,
+
+            "Content-Type":
+              "application/json"
+
+          },
+
+          body:
+            JSON.stringify(assinatura)
+
+        }
+      );
+
+
+    const dados =
+      await resposta.json();
+
+
+    if (!resposta.ok) {
+
+      console.error(
+        "Erro Mercado Pago:",
+        dados
+      );
+
+      return res
+        .status(resposta.status)
+        .json({
+
+          erro:
+            "Não foi possível criar a assinatura.",
+
+          detalhes:
+            dados
+
+        });
+
+    }
+
+
+    return res.json({
+
+      sucesso:
+        true,
+
+      assinatura_id:
+        dados.id,
+
+      status:
+        dados.status,
+
+      checkout_url:
+        dados.init_point
+
+    });
+
+
+  } catch (erro) {
+
+    console.error(
+      "Erro ao criar assinatura Mercado Pago:",
+      erro
+    );
+
+    return res.status(500).json({
+
+      erro:
+        "Erro interno ao criar assinatura."
+
+    });
+
+  }
+
+});
+
+
+// =====================================================
+// SERVIDOR
+// =====================================================
+
 const PORT =
   process.env.PORT || 3000;
 
