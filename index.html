@@ -88,6 +88,24 @@ td input,td select{padding:8px}
 @media(max-width:520px){.content{padding:12px}.formgrid,.kpis,.portal-grid{grid-template-columns:1fr}.statbar{grid-template-columns:1fr}.statbar>div+div{border-left:0;border-top:1px solid var(--line)}}
 @media print{.sidebar,.top,.no-print{display:none!important}.app{display:block}body{background:#fff}.content{padding:0;max-width:none}.page{display:none!important}#page-acm{display:block!important}.card{box-shadow:none;break-inside:avoid}}
 </style>
+
+<!-- AYRO ACM: autenticação Supabase -->
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+window.ayroSupabase = null;
+function initAyroSupabase(){
+  if (window.ayroSupabase) return window.ayroSupabase;
+  if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) return null;
+  if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
+  window.ayroSupabase = window.supabase.createClient(
+    window.SUPABASE_URL,
+    window.SUPABASE_ANON_KEY
+  );
+  return window.ayroSupabase;
+}
+</script>
+
 </head>
 <body>
 
@@ -102,10 +120,10 @@ td input,td select{padding:8px}
     <div class="login-box">
       <h2>Entrar no AYRO ACM Pro</h2>
       <div class="muted">Versão comercial 2.0 • protótipo funcional local</div>
-      <label>E-mail</label><input id="loginEmail" value="admin@ayroimoveis.com.br">
-      <label>Senha</label><input id="loginPassword" type="password" value="123456">
+      <label>E-mail</label><input id="loginEmail" type="email" autocomplete="username" placeholder="seu@email.com">
+      <label>Senha</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Sua senha">
       <div class="actions"><button class="btn gold full" onclick="login()">Entrar</button></div>
-      <div class="notice" style="margin-top:14px">Nesta versão, o login é demonstrativo e os dados ficam salvos neste navegador. Para comercialização real, o próximo passo é conectar autenticação e banco de dados em nuvem.</div>
+      <div class="notice" id="loginNotice" style="margin-top:14px">Acesso protegido pelo AYRO. Use o e-mail e a senha cadastrados.</div>
     </div>
   </div>
 </section>
@@ -281,16 +299,73 @@ const NUM=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
 let rows=[];
 let lastResult=null;
 
-function login(){
-  const email=document.getElementById('loginEmail').value.trim();
-  if(!email){alert('Informe o e-mail.');return}
-  localStorage.setItem('ayro_user',email);
+function showApp(user, profile={}){
+  const label = profile.name || profile.full_name || profile.nome || user.email || 'Usuário AYRO';
+  localStorage.setItem('ayro_user', user.email || label);
+  localStorage.setItem('ayro_profile', JSON.stringify(profile || {}));
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appScreen').classList.remove('hidden');
-  document.getElementById('sideUser').textContent=email;
+  document.getElementById('sideUser').textContent = label;
   refreshAll();
 }
-function logout(){document.getElementById('appScreen').classList.add('hidden');document.getElementById('loginScreen').classList.remove('hidden')}
+
+async function login(){
+  const email=document.getElementById('loginEmail').value.trim();
+  const password=document.getElementById('loginPassword').value;
+  const notice=document.getElementById('loginNotice');
+
+  if(!email || !password){
+    alert('Informe o e-mail e a senha.');
+    return;
+  }
+
+  const client=initAyroSupabase();
+  if(!client){
+    alert('Supabase não configurado. Verifique o arquivo config.js no GitHub.');
+    return;
+  }
+
+  notice.textContent='Entrando...';
+
+  try{
+    const {data,error}=await client.auth.signInWithPassword({email,password});
+    if(error) throw error;
+
+    const user=data.user;
+    const {data:profile,error:profileError}=await client
+      .from('profiles')
+      .select('*')
+      .eq('id',user.id)
+      .single();
+
+    if(profileError){
+      await client.auth.signOut();
+      throw new Error('Perfil não encontrado ou sem permissão de acesso.');
+    }
+
+    if(profile && profile.active === false){
+      await client.auth.signOut();
+      throw new Error('Seu acesso ao AYRO está desativado.');
+    }
+
+    notice.textContent='Acesso autorizado.';
+    showApp(user,profile || {});
+  }catch(err){
+    console.error('AYRO login:',err);
+    notice.textContent='Não foi possível entrar. Confira e-mail, senha e liberação do usuário.';
+    alert(err.message || 'Erro ao entrar.');
+  }
+}
+
+async function logout(){
+  const client=initAyroSupabase();
+  if(client) await client.auth.signOut();
+  localStorage.removeItem('ayro_user');
+  localStorage.removeItem('ayro_profile');
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginPassword').value='';
+}
 function go(page,btn){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -300,22 +375,17 @@ function go(page,btn){
   document.getElementById('pageTitle').textContent=names[page]||'AYRO ACM Pro 2.0';
   if(page==='history')renderHistory(); if(page==='clients')renderClients(); if(page==='dashboard')refreshDashboard();
 }
-function addRow(data={source:'OLX',bairro:'',area:'',price:'',sim:4,note:'',eligible:true}){rows.push(data);renderRows()}
+function addRow(data={source:'OLX',bairro:'',area:'',price:'',sim:4,note:''}){rows.push(data);renderRows()}
 function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
   rows.forEach((r,i)=>{
     const tr=document.createElement('tr');
-    const fontes=['OLX','ZAP','Viva Real','Chaves na Mão','Imovelweb','Outro'];
-    if(r.source && !fontes.includes(r.source)) fontes.unshift(r.source);
-    const linkHtml=/^https?:\/\//i.test(String(r.note||''))
-      ? `<a href="${esc(r.note)}" target="_blank" rel="noopener" style="font-weight:800;color:#8a6500;white-space:nowrap">Abrir anúncio</a><div class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis">${esc(r.note)}</div>`
-      : `<input value="${esc(r.note)}" placeholder="Link ou observação" onchange="setRow(${i},'note',this.value)">`;
-    tr.innerHTML=`<td><select onchange="setRow(${i},'source',this.value)">${fontes.map(x=>`<option ${r.source===x?'selected':''}>${x}</option>`).join('')}</select>${r.eligible===false?'<div class="muted">Referência</div>':''}</td>
+    tr.innerHTML=`<td><select onchange="setRow(${i},'source',this.value)">${['OLX','ZAP','Viva Real','Chaves na Mão','Outro'].map(x=>`<option ${r.source===x?'selected':''}>${x}</option>`).join('')}</select></td>
     <td><input value="${esc(r.bairro)}" onchange="setRow(${i},'bairro',this.value)"></td>
     <td><input type="number" min="1" value="${r.area}" onchange="setRow(${i},'area',this.value)"></td>
     <td><input type="number" min="1" value="${r.price}" onchange="setRow(${i},'price',this.value)"></td>
     <td><select onchange="setRow(${i},'sim',this.value)">${[5,4,3,2,1].map(x=>`<option value="${x}" ${+r.sim===x?'selected':''}>${x}/5</option>`).join('')}</select></td>
-    <td>${linkHtml}</td>
+    <td><input value="${esc(r.note)}" placeholder="Link ou observação" onchange="setRow(${i},'note',this.value)"></td>
     <td class="no-print"><button class="btn red" onclick="removeRow(${i})">×</button></td>`;
     tb.appendChild(tr);
   });
@@ -324,7 +394,7 @@ function renderRows(){
 function esc(v){return String(v??'').replace(/"/g,'&quot;')}
 function setRow(i,k,v){rows[i][k]=v;document.getElementById('countBadge').textContent=validRows().length+' válidos'}
 function removeRow(i){rows.splice(i,1);renderRows()}
-function validRows(){return rows.filter(r=>r.eligible!==false&&+r.area>0&&+r.price>0)}
+function validRows(){return rows.filter(r=>+r.area>0&&+r.price>0)}
 function q(a,p){const x=[...a].sort((m,n)=>m-n);if(!x.length)return 0;const pos=(x.length-1)*p,b=Math.floor(pos),r=pos-b;return x[b+1]!==undefined?x[b]+r*(x[b+1]-x[b]):x[b]}
 function weightedMean(a){let n=0,d=0;a.forEach(x=>{n+=x.ppm*x.w;d+=x.w});return d?n/d:0}
 function round5(v){return Math.round(v/5000)*5000}
@@ -401,48 +471,10 @@ function refreshDashboard(){
  const el=document.getElementById('recentList');el.innerHTML=acms.length?acms.slice(0,5).map(a=>`<div class="item"><div><strong>${esc(a.property.owner||a.property.bairro||'Avaliação')}</strong><small>${new Date(a.date).toLocaleDateString('pt-BR')} • ${BRL.format(a.result.market)}</small></div><button class="btn light" onclick="loadACM(${a.id})">Abrir</button></div>`).join(''):'<div class="muted">Nenhuma avaliação salva ainda.</div>';
 }
 function refreshAll(){refreshDashboard();renderHistory();renderClients();renderRows();loadSettings()}
-async function openSearches(){
+function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
- const beds=document.getElementById('beds').value,area=document.getElementById('area').value;
- const busca=`${type} à venda ${bairro} ${city} ${state} ${beds ? beds+' quartos' : ''} ${area ? area+' m²' : ''}`.trim();
- const API='https://ayro-acm-api.onrender.com';
- let win=window.open('','_blank');
- if(win) win.document.write('<h2 style="font-family:Arial">AYRO • pesquisando comparáveis...</h2>');
- try{
-   const resp=await fetch(`${API}/search?q=${encodeURIComponent(busca)}`);
-   const data=await resp.json();
-   if(!resp.ok || data.erro) throw new Error(data.erro||'Falha na API');
-   const comparaveis=Array.isArray(data.comparaveis)?data.comparaveis:[];
-   const referencias=Array.isArray(data.referencias)?data.referencias:[];
-   const todos=Array.isArray(data.resultados)?data.resultados:[];
-    const parseMoney=v=>{if(!v)return 0;let x=String(v).replace(/[^0-9.,]/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');return Number(x)||0};
-    const parseArea=v=>Number(String(v||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
-    // Exibe TODOS os resultados com link na tabela principal.
-    // Referências ficam visíveis, mas não entram no cálculo do ACM.
-    const lista=todos.length?todos:[...comparaveis,...referencias];
-    const novos=lista.filter(x=>x&&x.link).map(x=>({
-      source:x.fonte||'Outro',
-      bairro,
-      area:parseArea(x.area),
-      price:parseMoney(x.preco),
-      sim:x.comparavel_valido?5:4,
-      note:x.link||'',
-      eligible:Boolean(x.comparavel_valido)
-    }));
-    rows=novos;
-    renderRows();
-   const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0"><b>${ok?'✓ Comparável':'Referência'} • ${x.fonte||'Fonte'}</b><h3 style="margin:7px 0">${x.titulo||'Anúncio'}</h3><div>${x.preco||'Preço não identificado'} ${x.area?'• '+x.area:''}</div><p>${x.descricao||''}</p>${x.link?`<a href="${x.link}" target="_blank">Abrir anúncio</a>`:''}</div>`;
-   if(win){
-     win.document.open();
-     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis encontrados</h2><p><b>${comparaveis.length}</b> comparável(is) filtrado(s) • <b>${referencias.length}</b> referência(s).</p>${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Outros resultados encontrados</h2>'+referencias.map(x=>card(x,false)).join(''):''}</body>`);
-     win.document.close();
-   }
-   if(!comparaveis.length) alert('A API respondeu, mas nenhum resultado passou pelo filtro de comparáveis. Os links encontrados foram abertos como referências.');
-    else if(!novos.length) alert('A pesquisa respondeu, mas nenhum resultado trouxe link utilizável.');
- }catch(e){
-   if(win)win.close();
-   alert('Não foi possível consultar a API AYRO: '+e.message);
- }
+ const q=encodeURIComponent(`${type} à venda ${bairro} ${city} ${state}`);
+ [`https://www.google.com/search?q=site%3Aolx.com.br%2Fimoveis+${q}`,`https://www.google.com/search?q=site%3Azapimoveis.com.br+${q}`,`https://www.google.com/search?q=site%3Avivareal.com.br+${q}`,`https://www.google.com/search?q=site%3Achavesnamao.com.br+${q}`].forEach(u=>window.open(u,'_blank'));
 }
 function loadDemo(){
  document.getElementById('owner').value='Cliente Demonstração';document.getElementById('bairro').value='Alto';document.getElementById('type').value='Apartamento';document.getElementById('area').value=90;document.getElementById('beds').value=3;
@@ -462,7 +494,29 @@ function saveSettings(){
 function loadSettings(){
  const s=JSON.parse(localStorage.getItem('ayro_settings')||'{}');Object.entries(s).forEach(([k,v])=>{const el=document.getElementById(k);if(el)el.value=v});
 }
-if(localStorage.getItem('ayro_user')){document.getElementById('loginScreen').classList.add('hidden');document.getElementById('appScreen').classList.remove('hidden');document.getElementById('sideUser').textContent=localStorage.getItem('ayro_user')}
+async function restoreAyroSession(){
+  const client=initAyroSupabase();
+  if(!client) return;
+  try{
+    const {data:{session}}=await client.auth.getSession();
+    if(!session?.user) return;
+
+    const {data:profile,error}=await client
+      .from('profiles')
+      .select('*')
+      .eq('id',session.user.id)
+      .single();
+
+    if(error || (profile && profile.active === false)){
+      await client.auth.signOut();
+      return;
+    }
+    showApp(session.user,profile || {});
+  }catch(err){
+    console.error('AYRO sessão:',err);
+  }
+}
+restoreAyroSession();
 addRow();addRow();addRow();refreshAll();
 </script>
 </body>
