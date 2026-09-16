@@ -53,7 +53,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       });
     }
 
-    // Identifica o tipo do imóvel
     const tipoBusca =
       /apartamento|apto/i.test(q)
         ? "apartamento"
@@ -61,7 +60,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         ? "casa"
         : "";
 
-    // Identifica quantidade de quartos
     const quartosMatch =
       q.match(/(\d+)\s*quartos?/i);
 
@@ -70,17 +68,12 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         ? Number(quartosMatch[1])
         : null;
 
-    // Identifica área
     const areaMatch =
-      q.match(
-        /(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i
-      );
+      q.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i);
 
     const areaBusca =
       areaMatch
-        ? Number(
-            areaMatch[1].replace(",", ".")
-          )
+        ? Number(areaMatch[1].replace(",", "."))
         : null;
 
     const resultados =
@@ -96,20 +89,16 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
           const texto =
             `${titulo} ${descricao}`;
 
-          // Procura preços
           const precos =
             texto.match(
               /R\$\s?[\d.]+(?:,\d{2})?/g
             ) || [];
 
-          // Procura áreas
           const areas =
             texto.match(
               /\d+(?:[.,]\d+)?\s?m²/gi
             ) || [];
 
-          // Evita confundir condomínio e IPTU
-          // com preço de venda
           const precosValidos =
             precos.filter(p => {
 
@@ -143,7 +132,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
                 )
               : null;
 
-          // Confere tipo do imóvel
           let tipoOk = true;
 
           if (tipoBusca === "apartamento") {
@@ -161,7 +149,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
                 .test(texto);
           }
 
-          // Confere quartos
           let quartosOk = true;
 
           if (quartosBusca) {
@@ -178,7 +165,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
               regexQuartos.test(texto);
           }
 
-          // Confere área
           let areaOk = true;
 
           if (
@@ -191,12 +177,10 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
                 areaResultado - areaBusca
               ) / areaBusca;
 
-            // tolerância máxima de 35%
             areaOk =
               diferenca <= 0.35;
           }
 
-          // Exclui redes sociais
           const social =
             /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i
               .test(item.link || "");
@@ -207,7 +191,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
           const temArea =
             Boolean(areaResultado);
 
-          // Detecta páginas coletivas
           const paginaColetiva =
             /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
               .test(texto) ||
@@ -218,7 +201,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
             /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i
               .test(titulo);
 
-          // Mantém a lógica dos comparáveis
           const comparavelValido =
             Boolean(item.link) &&
             temPreco &&
@@ -271,10 +253,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
           item => item.link
         );
 
-    // =========================================
-    // REMOVE LINKS DUPLICADOS
-    // =========================================
-
     const linksVistos =
       new Set();
 
@@ -296,10 +274,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
         return true;
       });
-
-    // =========================================
-    // COMPARÁVEIS
-    // =========================================
 
     const chavesComparaveis =
       new Set();
@@ -348,19 +322,11 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         return true;
       });
 
-    // =========================================
-    // REFERÊNCIAS
-    // =========================================
-
     const referencias =
       resultadosUnicos.filter(
         item =>
           !item.comparavel_valido
       );
-
-    // =========================================
-    // RESPOSTA PARA O APLICATIVO
-    // =========================================
 
     res.json({
       sucesso: true,
@@ -377,7 +343,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       referencias:
         referencias,
 
-      // Mantido para o index.html atual
       resultados:
         resultadosUnicos
     });
@@ -395,111 +360,500 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
 
 // =========================================
-// MERCADO PAGO - ASSINATURA AYRO ACM PRO
-// Plano: R$ 49,90 por mês
+// MERCADO PAGO - PLANO AYRO ACM PRO
+// R$ 49,90 por mês
 // =========================================
 
-app.post("/api/mercadopago/criar-assinatura", async (req, res) => {
+const MP_API = "https://api.mercadopago.com";
+
+const AYRO_BACK_URL =
+  process.env.AYRO_BACK_URL ||
+  "https://ayro-acm.onrender.com";
+
+
+function mercadoPagoHeaders() {
+
+  const accessToken =
+    process.env.MERCADOPAGO_ACCESS_TOKEN;
+
+  if (!accessToken) return null;
+
+  return {
+    Authorization:
+      `Bearer ${accessToken}`,
+
+    "Content-Type":
+      "application/json"
+  };
+}
+
+
+async function lerRespostaJson(resposta) {
+
+  const texto =
+    await resposta.text();
+
+  if (!texto) return {};
+
   try {
-    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-
-    if (!accessToken) {
-      return res.status(500).json({
-        erro: "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
-      });
-    }
-
-    const { email } = req.body || {};
-
-    if (!email) {
-      return res.status(400).json({
-        erro: "Informe o e-mail do cliente."
-      });
-    }
-
-    const baseUrl = "https://ayro-acm.onrender.com";
-
-    const assinatura = {
-      reason: "AYRO ACM Pro",
-      external_reference: `AYRO-${Date.now()}`,
-      payer_email: email,
-
-      auto_recurring: {
-        frequency: 1,
-        frequency_type: "months",
-        transaction_amount: 49.90,
-        currency_id: "BRL"
-      },
-
-      back_url: baseUrl,
-      status: "pending"
+    return JSON.parse(texto);
+  } catch {
+    return {
+      message: texto
     };
+  }
+}
 
-    const resposta = await fetch(
-      "https://api.mercadopago.com/preapproval",
-      {
-        method: "POST",
 
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
+// =========================================
+// CRIAR PLANO COMPARTILHÁVEL
+// =========================================
+
+app.post(
+  "/api/mercadopago/criar-plano",
+  async (req, res) => {
+
+    try {
+
+      const headers =
+        mercadoPagoHeaders();
+
+      if (!headers) {
+
+        return res.status(500).json({
+          erro:
+            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+        });
+      }
+
+
+      const plano = {
+
+        reason:
+          "AYRO ACM Pro",
+
+        external_reference:
+          `AYRO-ACM-PRO-${Date.now()}`,
+
+        auto_recurring: {
+
+          frequency: 1,
+
+          frequency_type:
+            "months",
+
+          transaction_amount:
+            49.90,
+
+          currency_id:
+            "BRL"
         },
 
-        body: JSON.stringify(assinatura)
+        back_url:
+          AYRO_BACK_URL
+      };
+
+
+      const resposta =
+        await fetch(
+          `${MP_API}/preapproval_plan`,
+          {
+            method: "POST",
+            headers,
+            body:
+              JSON.stringify(plano)
+          }
+        );
+
+
+      const dados =
+        await lerRespostaJson(
+          resposta
+        );
+
+
+      if (!resposta.ok) {
+
+        console.error(
+          "Erro Mercado Pago ao criar plano:",
+          dados
+        );
+
+        return res
+          .status(resposta.status)
+          .json({
+
+            erro:
+              "Não foi possível criar o plano de assinatura.",
+
+            detalhes:
+              dados
+          });
       }
-    );
 
-    const dados = await resposta.json();
 
-    if (!resposta.ok) {
+      return res.json({
+
+        sucesso: true,
+
+        plano_id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        checkout_url:
+          dados.init_point,
+
+        init_point:
+          dados.init_point,
+
+        auto_recurring:
+          dados.auto_recurring
+      });
+
+
+    } catch (erro) {
 
       console.error(
-        "Erro Mercado Pago:",
-        dados
+        "Erro ao criar plano Mercado Pago:",
+        erro
       );
 
       return res
-        .status(resposta.status)
+        .status(500)
         .json({
           erro:
-            "Não foi possível criar a assinatura.",
-
-          detalhes:
-            dados
+            "Erro interno ao criar o plano."
         });
     }
-
-    return res.json({
-      sucesso: true,
-
-      assinatura_id:
-        dados.id,
-
-      status:
-        dados.status,
-
-      checkout_url:
-        dados.init_point
-    });
-
-  } catch (erro) {
-
-    console.error(
-      "Erro ao criar assinatura Mercado Pago:",
-      erro
-    );
-
-    return res.status(500).json({
-      erro:
-        "Erro interno ao criar assinatura."
-    });
   }
-});
+);
 
 
 // =========================================
-// MERCADO PAGO - CONSULTAR ASSINATURA
-// DIAGNÓSTICO
+// COMPATIBILIDADE COM O INDEX.HTML ATUAL
+// =========================================
+
+app.post(
+  "/api/mercadopago/criar-assinatura",
+  async (req, res) => {
+
+    try {
+
+      const headers =
+        mercadoPagoHeaders();
+
+      if (!headers) {
+
+        return res.status(500).json({
+          erro:
+            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+        });
+      }
+
+
+      const planoConfigurado =
+        String(
+          process.env.MERCADOPAGO_PLAN_ID ||
+          ""
+        ).trim();
+
+
+      // Se já tivermos um plano,
+      // reutiliza sempre o mesmo.
+      if (planoConfigurado) {
+
+        const consulta =
+          await fetch(
+            `${MP_API}/preapproval_plan/${encodeURIComponent(planoConfigurado)}`,
+            {
+              method: "GET",
+              headers
+            }
+          );
+
+
+        const plano =
+          await lerRespostaJson(
+            consulta
+          );
+
+
+        if (!consulta.ok) {
+
+          console.error(
+            "Erro ao consultar plano configurado:",
+            plano
+          );
+
+          return res
+            .status(consulta.status)
+            .json({
+
+              erro:
+                "O MERCADOPAGO_PLAN_ID configurado não pôde ser consultado.",
+
+              detalhes:
+                plano
+            });
+        }
+
+
+        return res.json({
+
+          sucesso: true,
+
+          plano_id:
+            plano.id,
+
+          status:
+            plano.status,
+
+          checkout_url:
+            plano.init_point,
+
+          init_point:
+            plano.init_point
+        });
+      }
+
+
+      // Se ainda não existe plano configurado,
+      // cria o primeiro.
+
+      const payload = {
+
+        reason:
+          "AYRO ACM Pro",
+
+        external_reference:
+          `AYRO-ACM-PRO-${Date.now()}`,
+
+        auto_recurring: {
+
+          frequency: 1,
+
+          frequency_type:
+            "months",
+
+          transaction_amount:
+            49.90,
+
+          currency_id:
+            "BRL"
+        },
+
+        back_url:
+          AYRO_BACK_URL
+      };
+
+
+      const resposta =
+        await fetch(
+          `${MP_API}/preapproval_plan`,
+          {
+
+            method:
+              "POST",
+
+            headers,
+
+            body:
+              JSON.stringify(payload)
+          }
+        );
+
+
+      const dados =
+        await lerRespostaJson(
+          resposta
+        );
+
+
+      if (!resposta.ok) {
+
+        console.error(
+          "Erro Mercado Pago:",
+          dados
+        );
+
+        return res
+          .status(resposta.status)
+          .json({
+
+            erro:
+              "Não foi possível criar o plano de assinatura.",
+
+            detalhes:
+              dados
+          });
+      }
+
+
+      return res.json({
+
+        sucesso:
+          true,
+
+        plano_id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        checkout_url:
+          dados.init_point,
+
+        init_point:
+          dados.init_point,
+
+        aviso:
+          "Salve este plano_id como MERCADOPAGO_PLAN_ID no Render para reutilizar o mesmo plano."
+      });
+
+
+    } catch (erro) {
+
+      console.error(
+        "Erro Mercado Pago:",
+        erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            "Erro interno no Mercado Pago."
+        });
+    }
+  }
+);
+
+
+// =========================================
+// CONSULTAR PLANO
+// =========================================
+
+app.get(
+  "/api/mercadopago/consultar-plano/:id",
+  async (req, res) => {
+
+    try {
+
+      const headers =
+        mercadoPagoHeaders();
+
+      if (!headers) {
+
+        return res.status(500).json({
+          erro:
+            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+        });
+      }
+
+
+      const id =
+        String(
+          req.params.id || ""
+        ).trim();
+
+
+      if (!id) {
+
+        return res
+          .status(400)
+          .json({
+            erro:
+              "ID do plano não informado."
+          });
+      }
+
+
+      const resposta =
+        await fetch(
+          `${MP_API}/preapproval_plan/${encodeURIComponent(id)}`,
+          {
+            method:
+              "GET",
+
+            headers
+          }
+        );
+
+
+      const dados =
+        await lerRespostaJson(
+          resposta
+        );
+
+
+      if (!resposta.ok) {
+
+        return res
+          .status(resposta.status)
+          .json({
+
+            erro:
+              "Não foi possível consultar o plano.",
+
+            detalhes:
+              dados
+          });
+      }
+
+
+      return res.json({
+
+        sucesso:
+          true,
+
+        id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        reason:
+          dados.reason,
+
+        init_point:
+          dados.init_point,
+
+        back_url:
+          dados.back_url,
+
+        auto_recurring:
+          dados.auto_recurring,
+
+        date_created:
+          dados.date_created,
+
+        last_modified:
+          dados.last_modified
+      });
+
+
+    } catch (erro) {
+
+      console.error(
+        "Erro ao consultar plano Mercado Pago:",
+        erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            "Erro interno ao consultar o plano."
+        });
+    }
+  }
+);
+
+
+// =========================================
+// CONSULTAR ASSINATURA INDIVIDUAL
 // =========================================
 
 app.get(
@@ -508,10 +862,10 @@ app.get(
 
     try {
 
-      const accessToken =
-        process.env.MERCADOPAGO_ACCESS_TOKEN;
+      const headers =
+        mercadoPagoHeaders();
 
-      if (!accessToken) {
+      if (!headers) {
 
         return res.status(500).json({
           erro:
@@ -519,46 +873,49 @@ app.get(
         });
       }
 
-      const { id } =
-        req.params;
+
+      const id =
+        String(
+          req.params.id || ""
+        ).trim();
+
 
       if (!id) {
 
-        return res.status(400).json({
-          erro:
-            "ID da assinatura não informado."
-        });
+        return res
+          .status(400)
+          .json({
+            erro:
+              "ID da assinatura não informado."
+          });
       }
+
 
       const resposta =
         await fetch(
-          `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+          `${MP_API}/preapproval/${encodeURIComponent(id)}`,
           {
-            method: "GET",
 
-            headers: {
-              "Authorization":
-                `Bearer ${accessToken}`,
+            method:
+              "GET",
 
-              "Content-Type":
-                "application/json"
-            }
+            headers
           }
         );
 
+
       const dados =
-        await resposta.json();
+        await lerRespostaJson(
+          resposta
+        );
+
 
       if (!resposta.ok) {
-
-        console.error(
-          "Erro ao consultar assinatura:",
-          dados
-        );
 
         return res
           .status(resposta.status)
           .json({
+
             erro:
               "Não foi possível consultar a assinatura.",
 
@@ -567,12 +924,17 @@ app.get(
           });
       }
 
+
       return res.json({
 
-        sucesso: true,
+        sucesso:
+          true,
 
         id:
           dados.id,
+
+        preapproval_plan_id:
+          dados.preapproval_plan_id,
 
         status:
           dados.status,
@@ -595,12 +957,16 @@ app.get(
         auto_recurring:
           dados.auto_recurring,
 
+        next_payment_date:
+          dados.next_payment_date,
+
         date_created:
           dados.date_created,
 
         last_modified:
           dados.last_modified
       });
+
 
     } catch (erro) {
 
@@ -609,10 +975,12 @@ app.get(
         erro
       );
 
-      return res.status(500).json({
-        erro:
-          "Erro interno ao consultar a assinatura."
-      });
+      return res
+        .status(500)
+        .json({
+          erro:
+            "Erro interno ao consultar a assinatura."
+        });
     }
   }
 );
@@ -625,10 +993,13 @@ app.get(
 const PORT =
   process.env.PORT || 3000;
 
-app.listen(PORT, () => {
 
-  console.log(
-    `AYRO ACM API rodando na porta ${PORT}`
-  );
+app.listen(
+  PORT,
+  () => {
 
-});
+    console.log(
+      `AYRO ACM API rodando na porta ${PORT}`
+    );
+  }
+);
