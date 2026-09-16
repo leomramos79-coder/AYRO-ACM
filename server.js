@@ -138,13 +138,24 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
           /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i
           .test(item.link || "");
 
-        const comparavelValido =
-          Boolean(item.link) &&
-          tipoOk &&
-          quartosOk &&
-          areaOk &&
-          !social;
+       // Só aceita como comparável anúncio individual com dados suficientes
+const temPreco = Boolean(preco);
+const temArea = Boolean(areaResultado);
 
+const paginaColetiva =
+  /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i.test(texto) ||
+  /imóveis\s+(?:para|à)\s+venda/i.test(titulo) ||
+  /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i.test(titulo);
+
+const comparavelValido =
+  Boolean(item.link) &&
+  temPreco &&
+  temArea &&
+  tipoOk &&
+  quartosOk &&
+  areaOk &&
+  !social &&
+  !paginaColetiva;
         return {
           titulo: titulo,
           descricao: descricao,
