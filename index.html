@@ -300,17 +300,22 @@ function go(page,btn){
   document.getElementById('pageTitle').textContent=names[page]||'AYRO ACM Pro 2.0';
   if(page==='history')renderHistory(); if(page==='clients')renderClients(); if(page==='dashboard')refreshDashboard();
 }
-function addRow(data={source:'OLX',bairro:'',area:'',price:'',sim:4,note:''}){rows.push(data);renderRows()}
+function addRow(data={source:'OLX',bairro:'',area:'',price:'',sim:4,note:'',eligible:true}){rows.push(data);renderRows()}
 function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
   rows.forEach((r,i)=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td><select onchange="setRow(${i},'source',this.value)">${['OLX','ZAP','Viva Real','Chaves na Mão','Outro'].map(x=>`<option ${r.source===x?'selected':''}>${x}</option>`).join('')}</select></td>
+    const fontes=['OLX','ZAP','Viva Real','Chaves na Mão','Imovelweb','Outro'];
+    if(r.source && !fontes.includes(r.source)) fontes.unshift(r.source);
+    const linkHtml=/^https?:\/\//i.test(String(r.note||''))
+      ? `<a href="${esc(r.note)}" target="_blank" rel="noopener" style="font-weight:800;color:#8a6500;white-space:nowrap">Abrir anúncio</a><div class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis">${esc(r.note)}</div>`
+      : `<input value="${esc(r.note)}" placeholder="Link ou observação" onchange="setRow(${i},'note',this.value)">`;
+    tr.innerHTML=`<td><select onchange="setRow(${i},'source',this.value)">${fontes.map(x=>`<option ${r.source===x?'selected':''}>${x}</option>`).join('')}</select>${r.eligible===false?'<div class="muted">Referência</div>':''}</td>
     <td><input value="${esc(r.bairro)}" onchange="setRow(${i},'bairro',this.value)"></td>
     <td><input type="number" min="1" value="${r.area}" onchange="setRow(${i},'area',this.value)"></td>
     <td><input type="number" min="1" value="${r.price}" onchange="setRow(${i},'price',this.value)"></td>
     <td><select onchange="setRow(${i},'sim',this.value)">${[5,4,3,2,1].map(x=>`<option value="${x}" ${+r.sim===x?'selected':''}>${x}/5</option>`).join('')}</select></td>
-    <td><input value="${esc(r.note)}" placeholder="Link ou observação" onchange="setRow(${i},'note',this.value)"></td>
+    <td>${linkHtml}</td>
     <td class="no-print"><button class="btn red" onclick="removeRow(${i})">×</button></td>`;
     tb.appendChild(tr);
   });
@@ -319,7 +324,7 @@ function renderRows(){
 function esc(v){return String(v??'').replace(/"/g,'&quot;')}
 function setRow(i,k,v){rows[i][k]=v;document.getElementById('countBadge').textContent=validRows().length+' válidos'}
 function removeRow(i){rows.splice(i,1);renderRows()}
-function validRows(){return rows.filter(r=>+r.area>0&&+r.price>0)}
+function validRows(){return rows.filter(r=>r.eligible!==false&&+r.area>0&&+r.price>0)}
 function q(a,p){const x=[...a].sort((m,n)=>m-n);if(!x.length)return 0;const pos=(x.length-1)*p,b=Math.floor(pos),r=pos-b;return x[b+1]!==undefined?x[b]+r*(x[b+1]-x[b]):x[b]}
 function weightedMean(a){let n=0,d=0;a.forEach(x=>{n+=x.ppm*x.w;d+=x.w});return d?n/d:0}
 function round5(v){return Math.round(v/5000)*5000}
@@ -410,11 +415,22 @@ async function openSearches(){
    const comparaveis=Array.isArray(data.comparaveis)?data.comparaveis:[];
    const referencias=Array.isArray(data.referencias)?data.referencias:[];
    const todos=Array.isArray(data.resultados)?data.resultados:[];
-   const escolhidos=comparaveis.length?comparaveis:todos.filter(x=>x.comparavel_valido);
-   const parseMoney=v=>{if(!v)return 0;let x=String(v).replace(/[^0-9.,]/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');return Number(x)||0};
-   const parseArea=v=>Number(String(v||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
-   const novos=escolhidos.map(x=>({source:x.fonte||'Outro',bairro,area:parseArea(x.area),price:parseMoney(x.preco),sim:5,note:x.link||''})).filter(x=>x.area>0&&x.price>0);
-   if(novos.length){rows=novos;renderRows()}
+    const parseMoney=v=>{if(!v)return 0;let x=String(v).replace(/[^0-9.,]/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');return Number(x)||0};
+    const parseArea=v=>Number(String(v||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
+    // Exibe TODOS os resultados com link na tabela principal.
+    // Referências ficam visíveis, mas não entram no cálculo do ACM.
+    const lista=todos.length?todos:[...comparaveis,...referencias];
+    const novos=lista.filter(x=>x&&x.link).map(x=>({
+      source:x.fonte||'Outro',
+      bairro,
+      area:parseArea(x.area),
+      price:parseMoney(x.preco),
+      sim:x.comparavel_valido?5:4,
+      note:x.link||'',
+      eligible:Boolean(x.comparavel_valido)
+    }));
+    rows=novos;
+    renderRows();
    const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0"><b>${ok?'✓ Comparável':'Referência'} • ${x.fonte||'Fonte'}</b><h3 style="margin:7px 0">${x.titulo||'Anúncio'}</h3><div>${x.preco||'Preço não identificado'} ${x.area?'• '+x.area:''}</div><p>${x.descricao||''}</p>${x.link?`<a href="${x.link}" target="_blank">Abrir anúncio</a>`:''}</div>`;
    if(win){
      win.document.open();
@@ -422,7 +438,7 @@ async function openSearches(){
      win.document.close();
    }
    if(!comparaveis.length) alert('A API respondeu, mas nenhum resultado passou pelo filtro de comparáveis. Os links encontrados foram abertos como referências.');
-   else if(!novos.length) alert(`${comparaveis.length} comparável(is) encontrado(s). Os links foram abertos, mas preço/área ainda não puderam ser preenchidos automaticamente em todos.`);
+    else if(!novos.length) alert('A pesquisa respondeu, mas nenhum resultado trouxe link utilizável.');
  }catch(e){
    if(win)win.close();
    alert('Não foi possível consultar a API AYRO: '+e.message);
