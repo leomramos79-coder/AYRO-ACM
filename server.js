@@ -15,7 +15,9 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
     const { q } = req.query;
 
     if (!q) {
-      return res.status(400).json({ erro: "Informe uma pesquisa." });
+      return res.status(400).json({
+        erro: "Informe uma pesquisa."
+      });
     }
 
     const apiKey = process.env.SERPAPI_KEY;
@@ -36,38 +38,176 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
     const resposta = await fetch(url);
     const dados = await resposta.json();
-console.log("SERPAPI DEBUG:", JSON.stringify(dados.organic_results || [], null, 2));
+
     if (!resposta.ok || dados.error) {
       return res.status(500).json({
         erro: dados.error || "Erro ao consultar a SerpApi."
       });
     }
 
+    // Identifica o imóvel pesquisado
+    const tipoBusca =
+      /apartamento|apto/i.test(q)
+        ? "apartamento"
+        : /\bcasa\b/i.test(q)
+        ? "casa"
+        : "";
+
+    const quartosMatch = q.match(/(\d+)\s*quartos?/i);
+    const quartosBusca = quartosMatch
+      ? Number(quartosMatch[1])
+      : null;
+
+    const areaMatch = q.match(
+      /(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i
+    );
+
+    const areaBusca = areaMatch
+      ? Number(areaMatch[1].replace(",", "."))
+      : null;
+
     const resultados = (dados.organic_results || [])
-  
-  .map(item => {
-    const texto = `${item.title || ""} ${item.snippet || ""}`;
+      .map(item => {
 
-    const precos = texto.match(/R\$\s?[\d.]+(?:,\d{2})?/g) || [];
-    const areas = texto.match(/\d+(?:[.,]\d+)?\s?m²/gi) || [];
+        const titulo = item.title || "";
+        const descricao = item.snippet || "";
 
-    return {
-      titulo: item.title || "",
-      descricao: item.snippet || "",
-      link: item.link || "",
-      fonte: item.source || item.displayed_link || "",
-      preco: item.price || precos[0] || "",
-      area: areas[0] || ""
-    };
-  });
+        const texto = `${titulo} ${descricao}`;
 
-res.json({
-  sucesso: true,
-  total: resultados.length,
-  resultados: resultados
-});
+        const precos =
+          texto.match(/R\$\s?[\d.]+(?:,\d{2})?/g) || [];
+
+        const areas =
+          texto.match(/\d+(?:[.,]\d+)?\s?m²/gi) || [];
+
+        const preco = item.price || precos[0] || "";
+        const area = areas[0] || "";
+
+        const areaResultado = area
+          ? Number(
+              area
+                .replace(/m²/i, "")
+                .trim()
+                .replace(",", ".")
+            )
+          : null;
+
+        // Confere o tipo do imóvel
+        let tipoOk = true;
+
+        if (tipoBusca === "apartamento") {
+          tipoOk =
+            /apartamento|apto|flat|studio/i.test(texto) &&
+            !/\bcasa\b/i.test(texto);
+        }
+
+        if (tipoBusca === "casa") {
+          tipoOk =
+            /\bcasa\b|sobrado/i.test(texto) &&
+            !/apartamento|apto/i.test(texto);
+        }
+
+        // Confere quartos
+        let quartosOk = true;
+
+        if (quartosBusca) {
+          const regexQuartos = new RegExp(
+            "\\b" +
+            quartosBusca +
+            "\\s*(?:quartos?|dormitórios?)",
+            "i"
+          );
+
+          quartosOk = regexQuartos.test(texto);
+        }
+
+        // Confere área
+        let areaOk = true;
+
+        if (areaBusca && areaResultado) {
+          const diferenca =
+            Math.abs(areaResultado - areaBusca) /
+            areaBusca;
+
+          // tolerância máxima de 35%
+          areaOk = diferenca <= 0.35;
+        }
+
+        // Exclui redes sociais
+        const social =
+          /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i
+          .test(item.link || "");
+
+        const comparavelValido =
+          Boolean(item.link) &&
+          tipoOk &&
+          quartosOk &&
+          areaOk &&
+          !social;
+
+        return {
+          titulo: titulo,
+          descricao: descricao,
+          link: item.link || "",
+          fonte:
+            item.source ||
+            item.displayed_link ||
+            "",
+          preco: preco,
+          area: area,
+          comparavel_valido: comparavelValido
+        };
+      })
+      .filter(item => item.link);
+
+    // Remove links duplicados
+    const linksVistos = new Set();
+
+    const resultadosUnicos =
+      resultados.filter(item => {
+
+        const linkLimpo =
+          item.link
+            .split("?")[0]
+            .replace(/\/$/, "");
+
+        if (linksVistos.has(linkLimpo)) {
+          return false;
+        }
+
+        linksVistos.add(linkLimpo);
+
+        return true;
+      });
+
+    const comparaveis =
+      resultadosUnicos.filter(
+        item => item.comparavel_valido
+      );
+
+    const referencias =
+      resultadosUnicos.filter(
+        item => !item.comparavel_valido
+      );
+
+    res.json({
+      sucesso: true,
+
+      total: resultadosUnicos.length,
+
+      total_comparaveis:
+        comparaveis.length,
+
+      comparaveis: comparaveis,
+
+      referencias: referencias,
+
+      // Mantido para o index.html atual continuar funcionando
+      resultados: resultadosUnicos
+    });
 
   } catch (erro) {
+
     console.error(erro);
 
     res.status(500).json({
@@ -76,8 +216,11 @@ res.json({
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+  process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`AYRO ACM API rodando na porta ${PORT}`);
+  console.log(
+    `AYRO ACM API rodando na porta ${PORT}`
+  );
 });
