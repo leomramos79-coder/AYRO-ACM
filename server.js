@@ -80,7 +80,19 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         const areas =
           texto.match(/\d+(?:[.,]\d+)?\s?m²/gi) || [];
 
-        const preco = item.price || precos[0] || "";
+        // Identifica o preço de venda e evita confundir com condomínio/IPTU
+const precosValidos = precos.filter(p => {
+  const valor = Number(
+    p.replace(/R\$\s?/i, "")
+     .replace(/\./g, "")
+     .replace(",", ".")
+     .trim()
+  );
+
+  return valor >= 50000;
+});
+
+const preco = item.price || precosValidos[0] || "";
         const area = areas[0] || "";
 
         const areaResultado = area
