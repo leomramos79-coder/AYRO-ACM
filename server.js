@@ -162,7 +162,6 @@ const paginaColetiva =
 const comparavelValido =
   Boolean(item.link) &&
   temPreco &&
-  temArea &&
   tipoOk &&
   quartosOk &&
   areaOk &&
