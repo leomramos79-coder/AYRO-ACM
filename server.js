@@ -28,13 +28,21 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       });
     }
 
-    const url =
-      "https://serpapi.com/search.json?engine=google" +
-      "&q=" + encodeURIComponent(q) +
-      "&location=Brazil" +
-      "&hl=pt-br" +
-      "&gl=br" +
-      "&api_key=" + encodeURIComponent(apiKey);
+    const buscaOtimizada =
+  q +
+  ' imóvel à venda anúncio' +
+  ' preço R$' +
+  ' m²' +
+  ' -youtube -instagram -facebook -tiktok';
+
+const url =
+  "https://serpapi.com/search.json?engine=google" +
+  "&q=" + encodeURIComponent(buscaOtimizada) +
+  "&location=Brazil" +
+  "&hl=pt-br" +
+  "&gl=br" +
+  "&num=20" +
+  "&api_key=" + encodeURIComponent(apiKey);
 
     const resposta = await fetch(url);
     const dados = await resposta.json();
