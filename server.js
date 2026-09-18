@@ -7,7 +7,10 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.json({ status: "AYRO ACM API online" });
+  res.json({
+    status: "AYRO ACM API online",
+    versao: "2026-09-18-area-link-fix"
+  });
 });
 
 app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
@@ -28,10 +31,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       });
     }
 
-    // =========================================
-    // IDENTIFICA O IMÓVEL PESQUISADO
-    // =========================================
-
     const tipoBusca =
       /apartamento|apto/i.test(q) ? "apartamento" :
       /casa em condomínio/i.test(q) ? "casa" :
@@ -40,16 +39,11 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       /terreno/i.test(q) ? "terreno" :
       /galpão|galpao/i.test(q) ? "galpao" :
       /loja|comercial/i.test(q) ? "comercial" :
-      /sítio|sitio|fazenda/i.test(q) ? "sitio" :
-      "";
+      /sítio|sitio|fazenda/i.test(q) ? "sitio" : "";
 
-    const quartosMatch =
-      q.match(/(\d+)\s*quartos?/i);
-
+    const quartosMatch = q.match(/(\d+)\s*quartos?/i);
     const quartosBusca =
-      quartosMatch
-        ? Number(quartosMatch[1])
-        : null;
+      quartosMatch ? Number(quartosMatch[1]) : null;
 
     const areaMatch =
       q.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i);
@@ -59,22 +53,10 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         ? Number(areaMatch[1].replace(",", "."))
         : null;
 
-    // =========================================
-    // BUSCAS DIRECIONADAS
-    // =========================================
-    // Faz mais de uma busca para aumentar
-    // a chance de encontrar pelo menos
-    // 3 imóveis comparáveis reais.
-    // =========================================
-
     const consultas = [
-
       `${q} (site:olx.com.br OR site:zapimoveis.com.br OR site:vivareal.com.br) imóvel venda R$ m²`,
-
       `${q} (site:chavesnamao.com.br OR site:imovelweb.com.br OR site:wimoveis.com.br) imóvel venda R$ m²`,
-
       `${q} (site:kenlo.com.br OR site:quintoandar.com.br OR site:casamineira.com.br) imóvel venda R$ m²`
-
     ];
 
     const coletados = [];
@@ -83,68 +65,39 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
       const url =
         "https://serpapi.com/search.json?engine=google" +
-        "&q=" +
-        encodeURIComponent(consulta) +
+        "&q=" + encodeURIComponent(consulta) +
         "&location=Brazil" +
         "&hl=pt-br" +
         "&gl=br" +
         "&num=20" +
-        "&api_key=" +
-        encodeURIComponent(apiKey);
+        "&api_key=" + encodeURIComponent(apiKey);
 
-      try {
+      const resposta = await fetch(url);
+      const dados = await resposta.json();
 
-        const resposta =
-          await fetch(url);
-
-        const dados =
-          await resposta.json();
-
-        if (
-          !resposta.ok ||
-          dados.error
-        ) {
-
-          console.error(
-            "Erro SerpAPI:",
-            dados.error ||
-            resposta.status
-          );
-
-          continue;
-        }
-
-        coletados.push(
-          ...(dados.organic_results || [])
-        );
-
-      } catch (erroBusca) {
-
+      if (!resposta.ok || dados.error) {
         console.error(
-          "Erro em uma consulta SerpAPI:",
-          erroBusca
+          "SerpAPI:",
+          dados.error || resposta.status
         );
+        continue;
       }
-    }
 
-    // =========================================
-    // PORTAIS IMOBILIÁRIOS ACEITOS
-    // =========================================
+      coletados.push(
+        ...(dados.organic_results || [])
+      );
+    }
 
     const dominiosImobiliarios =
       /olx\.com\.br|zapimoveis\.com\.br|vivareal\.com\.br|chavesnamao\.com\.br|imovelweb\.com\.br|wimoveis\.com\.br|kenlo\.com\.br|quintoandar\.com\.br|casamineira\.com\.br/i;
 
-    // =========================================
-    // SITES / CONTEÚDOS QUE NÃO SERVEM
-    // PARA ACM
-    // =========================================
-
     const bloqueados =
       /instagram\.com|facebook\.com|youtube\.com|tiktok\.com|g1\.globo\.com|globo\.com|gov\.br|\.rj\.gov\.br|prefeitura|turismo|notícia|noticia|acidente/i;
 
-    // =========================================
-    // EXTRAI PREÇO
-    // =========================================
+
+    // ============================
+    // IDENTIFICAR PREÇO
+    // ============================
 
     function numeroPreco(texto) {
 
@@ -155,16 +108,14 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
       for (const p of achados) {
 
-        const n =
-          Number(
-            p
-              .replace(/R\$\s*/i, "")
-              .replace(/\./g, "")
-              .replace(",", ".")
-          );
+        const n = Number(
+          p
+            .replace(/R\$\s*/i, "")
+            .replace(/\./g, "")
+            .replace(",", ".")
+        );
 
         if (n >= 50000) {
-
           return {
             texto: p,
             valor: n
@@ -178,18 +129,19 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       };
     }
 
-    // =========================================
-    // EXTRAI ÁREA
-    // =========================================
+
+    // ============================
+    // IDENTIFICAR ÁREA
+    // CORRIGIDO PARA m² E m2
+    // ============================
 
     function numeroArea(texto) {
 
-      const achados =
-        [
-          ...texto.matchAll(
-            /(\d+(?:[.,]\d+)?)\s*m(?:²|2)\b/gi
-          )
-        ];
+      const achados = [
+        ...texto.matchAll(
+          /(\d+(?:[.,]\d+)?)\s*m(?:²|2)(?![a-z0-9])/gi
+        )
+      ];
 
       for (const m of achados) {
 
@@ -216,9 +168,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
       };
     }
 
-    // =========================================
-    // ANALISA CADA RESULTADO
-    // =========================================
 
     const resultados =
       coletados
@@ -249,77 +198,72 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
           const a =
             numeroArea(texto);
 
-          // =====================================
+
+          // ============================
           // TIPO DO IMÓVEL
-          // =====================================
+          // ============================
 
           let tipoOk = true;
 
-          if (
-            tipoBusca ===
-            "apartamento"
-          ) {
+          if (tipoBusca === "apartamento") {
 
             tipoOk =
               /apartamento|apto|flat|studio/i
                 .test(texto) &&
-              !/\bcasa\b/i
-                .test(texto);
+              !/\bcasa\b/i.test(texto);
 
-          } else if (
-            tipoBusca === "casa"
-          ) {
+          }
+
+          else if (tipoBusca === "casa") {
 
             tipoOk =
               /\bcasa\b|sobrado|condomínio|condominio/i
                 .test(texto) &&
-              !/apartamento|apto/i
-                .test(texto);
+              !/apartamento|apto/i.test(texto);
 
-          } else if (
-            tipoBusca === "cobertura"
-          ) {
+          }
 
-            tipoOk =
-              /cobertura/i
-                .test(texto);
-
-          } else if (
-            tipoBusca === "terreno"
-          ) {
+          else if (tipoBusca === "cobertura") {
 
             tipoOk =
-              /terreno|lote/i
-                .test(texto);
+              /cobertura/i.test(texto);
 
-          } else if (
-            tipoBusca === "galpao"
-          ) {
+          }
+
+          else if (tipoBusca === "terreno") {
 
             tipoOk =
-              /galpão|galpao/i
-                .test(texto);
+              /terreno|lote/i.test(texto);
 
-          } else if (
-            tipoBusca === "comercial"
-          ) {
+          }
+
+          else if (tipoBusca === "galpao") {
+
+            tipoOk =
+              /galpão|galpao/i.test(texto);
+
+          }
+
+          else if (tipoBusca === "comercial") {
 
             tipoOk =
               /loja|comercial|sala/i
                 .test(texto);
 
-          } else if (
-            tipoBusca === "sitio"
-          ) {
+          }
+
+          else if (tipoBusca === "sitio") {
 
             tipoOk =
               /sítio|sitio|fazenda|chácara|chacara/i
                 .test(texto);
+
           }
 
-          // =====================================
+
+          // ============================
           // QUARTOS
-          // =====================================
+          // ============================
 
           let quartosOk = true;
 
@@ -334,10 +278,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
                 /(\d+)\s*(?:quartos?|dormitórios?)/i
               );
 
-            // Se o anúncio informar quartos,
-            // permite diferença de 1 quarto.
-            // Se não informar, não elimina
-            // automaticamente o anúncio.
             quartosOk =
               qm
                 ? Math.abs(
@@ -347,9 +287,10 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
                 : true;
           }
 
-          // =====================================
+
+          // ============================
           // ÁREA
-          // =====================================
+          // ============================
 
           let areaOk =
             Boolean(a.valor);
@@ -359,48 +300,44 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
             a.valor
           ) {
 
-            // Tolerância de até 45%
-            // para não eliminar imóveis
-            // bons por pequenas diferenças.
             areaOk =
               Math.abs(
                 a.valor -
                 areaBusca
               ) /
-              areaBusca <=
-              0.45;
+              areaBusca <= 0.45;
           }
 
-          // =====================================
-          // IDENTIFICA PÁGINA COLETIVA
-          // =====================================
-          // Exemplo:
-          // "35 casas à venda..."
-          // Isso é referência,
-          // não imóvel individual.
-          // =====================================
+
+          // ============================
+          // EVITAR PÁGINAS COLETIVAS
+          // ============================
 
           const paginaColetiva =
 
             /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
-              .test(titulo) ||
+              .test(titulo)
+
+            ||
 
             /imóveis\s+(?:para|à)\s+venda/i
               .test(titulo);
+
 
           const dominioOk =
             dominiosImobiliarios
               .test(link);
 
-          const bloqueado =
-            bloqueados
-              .test(
-                `${link} ${fonte} ${texto}`
-              );
 
-          // =====================================
+          const bloqueado =
+            bloqueados.test(
+              `${link} ${fonte} ${texto}`
+            );
+
+
+          // ============================
           // COMPARÁVEL VÁLIDO
-          // =====================================
+          // ============================
 
           const comparavelValido =
 
@@ -422,6 +359,7 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
             areaOk;
 
+
           return {
 
             titulo,
@@ -432,17 +370,13 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
             fonte,
 
-            preco:
-              p.texto,
+            preco: p.texto,
 
-            preco_valor:
-              p.valor,
+            preco_valor: p.valor,
 
-            area:
-              a.texto,
+            area: a.texto,
 
-            area_valor:
-              a.valor,
+            area_valor: a.valor,
 
             comparavel_valido:
               comparavelValido
@@ -452,13 +386,13 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         })
 
         .filter(
-          item =>
-            item.link
+          x => x.link
         );
 
-    // =========================================
-    // REMOVE LINKS DUPLICADOS
-    // =========================================
+
+    // ============================
+    // REMOVER LINKS DUPLICADOS
+    // ============================
 
     const linksVistos =
       new Set();
@@ -474,7 +408,6 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         if (
           linksVistos.has(limpo)
         ) {
-
           return false;
         }
 
@@ -483,27 +416,24 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         return true;
       });
 
-    // =========================================
-    // COMPARÁVEIS REAIS
-    // =========================================
+
+    // ============================
+    // COMPARÁVEIS
+    // ============================
 
     const chaves =
       new Set();
 
     const comparaveis =
       resultadosUnicos
-
         .filter(item => {
 
           if (
             !item.comparavel_valido
           ) {
-
             return false;
           }
 
-          // Evita repetir o mesmo imóvel
-          // encontrado em resultados parecidos.
           const chave =
             `${Math.round(
               item.preco_valor / 1000
@@ -514,34 +444,25 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
           if (
             chaves.has(chave)
           ) {
-
             return false;
           }
 
           chaves.add(chave);
 
           return true;
-        })
 
+        })
         .slice(0, 8);
 
-    // =========================================
-    // REFERÊNCIAS
-    // =========================================
 
     const referencias =
       resultadosUnicos
-
         .filter(
-          item =>
-            !item.comparavel_valido
+          x =>
+            !x.comparavel_valido
         )
-
         .slice(0, 12);
 
-    // =========================================
-    // RESPOSTA PARA O INDEX.HTML
-    // =========================================
 
     return res.json({
 
@@ -567,20 +488,19 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 
     });
 
-  } catch (erro) {
-
-    console.error(
-      "Erro pesquisa AYRO:",
-      erro
-    );
-
-    return res
-      .status(500)
-      .json({
-        erro:
-          "Erro interno na pesquisa."
-      });
   }
+
+  catch (erro) {
+
+    console.error(erro);
+
+    res.status(500).json({
+      erro:
+        "Erro interno na pesquisa."
+    });
+
+  }
+
 });
 
 
@@ -598,20 +518,14 @@ const AYRO_BACK_URL =
   "https://ayro-acm.onrender.com";
 
 
-// =========================================
-// CABEÇALHOS MERCADO PAGO
-// =========================================
-
 function mercadoPagoHeaders() {
 
   const accessToken =
     process.env
       .MERCADOPAGO_ACCESS_TOKEN;
 
-  if (!accessToken) {
-
+  if (!accessToken)
     return null;
-  }
 
   return {
 
@@ -625,10 +539,6 @@ function mercadoPagoHeaders() {
 }
 
 
-// =========================================
-// LÊ RESPOSTA DO MERCADO PAGO
-// =========================================
-
 async function lerRespostaJson(
   resposta
 ) {
@@ -636,21 +546,23 @@ async function lerRespostaJson(
   const texto =
     await resposta.text();
 
-  if (!texto) {
-
+  if (!texto)
     return {};
-  }
 
   try {
 
     return JSON.parse(texto);
 
-  } catch {
+  }
+
+  catch {
 
     return {
       message: texto
     };
+
   }
+
 }
 
 
@@ -670,15 +582,15 @@ app.post(
 
       if (!headers) {
 
-        return res
-          .status(500)
-          .json({
+        return res.status(500).json({
 
-            erro:
-              "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
+          erro:
+            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
 
-          });
+        });
+
       }
+
 
       const plano = {
 
@@ -708,12 +620,16 @@ app.post(
 
       };
 
+
       const resposta =
         await fetch(
+
           `${MP_API}/preapproval_plan`,
+
           {
 
-            method: "POST",
+            method:
+              "POST",
 
             headers,
 
@@ -723,12 +639,15 @@ app.post(
               )
 
           }
+
         );
+
 
       const dados =
         await lerRespostaJson(
           resposta
         );
+
 
       if (!resposta.ok) {
 
@@ -738,9 +657,7 @@ app.post(
         );
 
         return res
-          .status(
-            resposta.status
-          )
+          .status(resposta.status)
           .json({
 
             erro:
@@ -750,7 +667,9 @@ app.post(
               dados
 
           });
+
       }
+
 
       return res.json({
 
@@ -773,7 +692,9 @@ app.post(
 
       });
 
-    } catch (erro) {
+    }
+
+    catch (erro) {
 
       console.error(
         "Erro ao criar plano Mercado Pago:",
@@ -788,16 +709,15 @@ app.post(
             "Erro interno ao criar o plano."
 
         });
+
     }
+
   }
 );
 
 
 // =========================================
-// CRIAR / ABRIR ASSINATURA
-// =========================================
-// Mantém compatibilidade com
-// o index.html atual.
+// CRIAR / REUTILIZAR ASSINATURA
 // =========================================
 
 app.post(
@@ -820,16 +740,17 @@ app.post(
               "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
 
           });
+
       }
 
-      // Usa o plano que já está
-      // configurado no Render.
+
       const planoConfigurado =
         String(
           process.env
             .MERCADOPAGO_PLAN_ID ||
           ""
         ).trim();
+
 
       if (planoConfigurado) {
 
@@ -841,18 +762,20 @@ app.post(
             )}`,
 
             {
-
-              method: "GET",
+              method:
+                "GET",
 
               headers
-
             }
+
           );
+
 
         const plano =
           await lerRespostaJson(
             consulta
           );
+
 
         if (!consulta.ok) {
 
@@ -874,11 +797,14 @@ app.post(
                 plano
 
             });
+
         }
+
 
         return res.json({
 
-          sucesso: true,
+          sucesso:
+            true,
 
           plano_id:
             plano.id,
@@ -893,11 +819,9 @@ app.post(
             plano.init_point
 
         });
+
       }
 
-      // =====================================
-      // CASO NÃO EXISTA PLAN_ID
-      // =====================================
 
       const payload = {
 
@@ -909,7 +833,8 @@ app.post(
 
         auto_recurring: {
 
-          frequency: 1,
+          frequency:
+            1,
 
           frequency_type:
             "months",
@@ -927,6 +852,7 @@ app.post(
 
       };
 
+
       const resposta =
         await fetch(
 
@@ -934,7 +860,8 @@ app.post(
 
           {
 
-            method: "POST",
+            method:
+              "POST",
 
             headers,
 
@@ -944,12 +871,15 @@ app.post(
               )
 
           }
+
         );
+
 
       const dados =
         await lerRespostaJson(
           resposta
         );
+
 
       if (!resposta.ok) {
 
@@ -971,11 +901,14 @@ app.post(
               dados
 
           });
+
       }
+
 
       return res.json({
 
-        sucesso: true,
+        sucesso:
+          true,
 
         plano_id:
           dados.id,
@@ -994,7 +927,9 @@ app.post(
 
       });
 
-    } catch (erro) {
+    }
+
+    catch (erro) {
 
       console.error(
         "Erro Mercado Pago:",
@@ -1009,7 +944,9 @@ app.post(
             "Erro interno no Mercado Pago."
 
         });
+
     }
+
   }
 );
 
@@ -1038,12 +975,16 @@ app.get(
               "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
 
           });
+
       }
+
 
       const id =
         String(
-          req.params.id || ""
+          req.params.id ||
+          ""
         ).trim();
+
 
       if (!id) {
 
@@ -1055,7 +996,9 @@ app.get(
               "ID do plano não informado."
 
           });
+
       }
+
 
       const resposta =
         await fetch(
@@ -1066,17 +1009,21 @@ app.get(
 
           {
 
-            method: "GET",
+            method:
+              "GET",
 
             headers
 
           }
+
         );
+
 
       const dados =
         await lerRespostaJson(
           resposta
         );
+
 
       if (!resposta.ok) {
 
@@ -1093,11 +1040,14 @@ app.get(
               dados
 
           });
+
       }
+
 
       return res.json({
 
-        sucesso: true,
+        sucesso:
+          true,
 
         id:
           dados.id,
@@ -1125,7 +1075,9 @@ app.get(
 
       });
 
-    } catch (erro) {
+    }
+
+    catch (erro) {
 
       console.error(
         "Erro ao consultar plano Mercado Pago:",
@@ -1140,13 +1092,15 @@ app.get(
             "Erro interno ao consultar o plano."
 
         });
+
     }
+
   }
 );
 
 
 // =========================================
-// CONSULTAR ASSINATURA INDIVIDUAL
+// CONSULTAR ASSINATURA
 // =========================================
 
 app.get(
@@ -1169,12 +1123,16 @@ app.get(
               "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
 
           });
+
       }
+
 
       const id =
         String(
-          req.params.id || ""
+          req.params.id ||
+          ""
         ).trim();
+
 
       if (!id) {
 
@@ -1186,7 +1144,9 @@ app.get(
               "ID da assinatura não informado."
 
           });
+
       }
+
 
       const resposta =
         await fetch(
@@ -1197,17 +1157,21 @@ app.get(
 
           {
 
-            method: "GET",
+            method:
+              "GET",
 
             headers
 
           }
+
         );
+
 
       const dados =
         await lerRespostaJson(
           resposta
         );
+
 
       if (!resposta.ok) {
 
@@ -1224,11 +1188,14 @@ app.get(
               dados
 
           });
+
       }
+
 
       return res.json({
 
-        sucesso: true,
+        sucesso:
+          true,
 
         id:
           dados.id,
@@ -1268,7 +1235,9 @@ app.get(
 
       });
 
-    } catch (erro) {
+    }
+
+    catch (erro) {
 
       console.error(
         "Erro ao consultar assinatura Mercado Pago:",
@@ -1283,17 +1252,20 @@ app.get(
             "Erro interno ao consultar a assinatura."
 
         });
+
     }
+
   }
 );
 
 
 // =========================================
-// PORTA DO RENDER
+// INICIAR SERVIDOR
 // =========================================
 
 const PORT =
-  process.env.PORT || 3000;
+  process.env.PORT ||
+  3000;
 
 app.listen(
   PORT,
