@@ -10,6 +10,11 @@ app.get("/", (req, res) => {
   res.json({ status: "AYRO ACM API online" });
 });
 
+
+// =====================================================
+// AYRO ACM - PESQUISA DE COMPARÁVEIS
+// =====================================================
+
 app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
   try {
     const { q } = req.query;
@@ -69,11 +74,15 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
         : null;
 
     const areaMatch =
-      q.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i);
+      q.match(
+        /(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i
+      );
 
     const areaBusca =
       areaMatch
-        ? Number(areaMatch[1].replace(",", "."))
+        ? Number(
+            areaMatch[1].replace(",", ".")
+          )
         : null;
 
     const resultados =
@@ -359,12 +368,13 @@ app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
 });
 
 
-// =========================================
+// =====================================================
 // MERCADO PAGO - PLANO AYRO ACM PRO
-// R$ 49,90 por mês
-// =========================================
+// R$ 49,90 POR MÊS
+// =====================================================
 
-const MP_API = "https://api.mercadopago.com";
+const MP_API =
+  "https://api.mercadopago.com";
 
 const AYRO_BACK_URL =
   process.env.AYRO_BACK_URL ||
@@ -376,7 +386,9 @@ function mercadoPagoHeaders() {
   const accessToken =
     process.env.MERCADOPAGO_ACCESS_TOKEN;
 
-  if (!accessToken) return null;
+  if (!accessToken) {
+    return null;
+  }
 
   return {
     Authorization:
@@ -393,7 +405,9 @@ async function lerRespostaJson(resposta) {
   const texto =
     await resposta.text();
 
-  if (!texto) return {};
+  if (!texto) {
+    return {};
+  }
 
   try {
     return JSON.parse(texto);
@@ -405,9 +419,9 @@ async function lerRespostaJson(resposta) {
 }
 
 
-// =========================================
-// CRIAR PLANO COMPARTILHÁVEL
-// =========================================
+// =====================================================
+// CRIAR PLANO MERCADO PAGO
+// =====================================================
 
 app.post(
   "/api/mercadopago/criar-plano",
@@ -419,13 +433,11 @@ app.post(
         mercadoPagoHeaders();
 
       if (!headers) {
-
         return res.status(500).json({
           erro:
             "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
         });
       }
-
 
       const plano = {
 
@@ -437,7 +449,8 @@ app.post(
 
         auto_recurring: {
 
-          frequency: 1,
+          frequency:
+            1,
 
           frequency_type:
             "months",
@@ -453,24 +466,22 @@ app.post(
           AYRO_BACK_URL
       };
 
-
       const resposta =
         await fetch(
           `${MP_API}/preapproval_plan`,
           {
-            method: "POST",
+            method:
+              "POST",
+
             headers,
+
             body:
               JSON.stringify(plano)
           }
         );
 
-
       const dados =
-        await lerRespostaJson(
-          resposta
-        );
-
+        await lerRespostaJson(resposta);
 
       if (!resposta.ok) {
 
@@ -491,10 +502,10 @@ app.post(
           });
       }
 
-
       return res.json({
 
-        sucesso: true,
+        sucesso:
+          true,
 
         plano_id:
           dados.id,
@@ -512,7 +523,6 @@ app.post(
           dados.auto_recurring
       });
 
-
     } catch (erro) {
 
       console.error(
@@ -520,20 +530,18 @@ app.post(
         erro
       );
 
-      return res
-        .status(500)
-        .json({
-          erro:
-            "Erro interno ao criar o plano."
-        });
+      return res.status(500).json({
+        erro:
+          "Erro interno ao criar o plano."
+      });
     }
   }
 );
 
 
-// =========================================
-// COMPATIBILIDADE COM O INDEX.HTML ATUAL
-// =========================================
+// =====================================================
+// CRIAR / ABRIR ASSINATURA
+// =====================================================
 
 app.post(
   "/api/mercadopago/criar-assinatura",
@@ -552,33 +560,29 @@ app.post(
         });
       }
 
-
       const planoConfigurado =
         String(
           process.env.MERCADOPAGO_PLAN_ID ||
           ""
         ).trim();
 
-
-      // Se já tivermos um plano,
-      // reutiliza sempre o mesmo.
       if (planoConfigurado) {
 
         const consulta =
           await fetch(
             `${MP_API}/preapproval_plan/${encodeURIComponent(planoConfigurado)}`,
             {
-              method: "GET",
+              method:
+                "GET",
+
               headers
             }
           );
-
 
         const plano =
           await lerRespostaJson(
             consulta
           );
-
 
         if (!consulta.ok) {
 
@@ -599,10 +603,10 @@ app.post(
             });
         }
 
-
         return res.json({
 
-          sucesso: true,
+          sucesso:
+            true,
 
           plano_id:
             plano.id,
@@ -618,10 +622,6 @@ app.post(
         });
       }
 
-
-      // Se ainda não existe plano configurado,
-      // cria o primeiro.
-
       const payload = {
 
         reason:
@@ -632,7 +632,8 @@ app.post(
 
         auto_recurring: {
 
-          frequency: 1,
+          frequency:
+            1,
 
           frequency_type:
             "months",
@@ -647,7 +648,6 @@ app.post(
         back_url:
           AYRO_BACK_URL
       };
-
 
       const resposta =
         await fetch(
@@ -664,12 +664,10 @@ app.post(
           }
         );
 
-
       const dados =
         await lerRespostaJson(
           resposta
         );
-
 
       if (!resposta.ok) {
 
@@ -689,7 +687,6 @@ app.post(
               dados
           });
       }
-
 
       return res.json({
 
@@ -712,7 +709,6 @@ app.post(
           "Salve este plano_id como MERCADOPAGO_PLAN_ID no Render para reutilizar o mesmo plano."
       });
 
-
     } catch (erro) {
 
       console.error(
@@ -720,20 +716,18 @@ app.post(
         erro
       );
 
-      return res
-        .status(500)
-        .json({
-          erro:
-            "Erro interno no Mercado Pago."
-        });
+      return res.status(500).json({
+        erro:
+          "Erro interno no Mercado Pago."
+      });
     }
   }
 );
 
 
-// =========================================
+// =====================================================
 // CONSULTAR PLANO
-// =========================================
+// =====================================================
 
 app.get(
   "/api/mercadopago/consultar-plano/:id",
@@ -752,23 +746,18 @@ app.get(
         });
       }
 
-
       const id =
         String(
           req.params.id || ""
         ).trim();
 
-
       if (!id) {
 
-        return res
-          .status(400)
-          .json({
-            erro:
-              "ID do plano não informado."
-          });
+        return res.status(400).json({
+          erro:
+            "ID do plano não informado."
+        });
       }
-
 
       const resposta =
         await fetch(
@@ -781,12 +770,10 @@ app.get(
           }
         );
 
-
       const dados =
         await lerRespostaJson(
           resposta
         );
-
 
       if (!resposta.ok) {
 
@@ -801,7 +788,6 @@ app.get(
               dados
           });
       }
-
 
       return res.json({
 
@@ -833,7 +819,6 @@ app.get(
           dados.last_modified
       });
 
-
     } catch (erro) {
 
       console.error(
@@ -841,20 +826,18 @@ app.get(
         erro
       );
 
-      return res
-        .status(500)
-        .json({
-          erro:
-            "Erro interno ao consultar o plano."
-        });
+      return res.status(500).json({
+        erro:
+          "Erro interno ao consultar o plano."
+      });
     }
   }
 );
 
 
-// =========================================
-// CONSULTAR ASSINATURA INDIVIDUAL
-// =========================================
+// =====================================================
+// CONSULTAR ASSINATURA
+// =====================================================
 
 app.get(
   "/api/mercadopago/consultar-assinatura/:id",
@@ -873,29 +856,23 @@ app.get(
         });
       }
 
-
       const id =
         String(
           req.params.id || ""
         ).trim();
 
-
       if (!id) {
 
-        return res
-          .status(400)
-          .json({
-            erro:
-              "ID da assinatura não informado."
-          });
+        return res.status(400).json({
+          erro:
+            "ID da assinatura não informado."
+        });
       }
-
 
       const resposta =
         await fetch(
           `${MP_API}/preapproval/${encodeURIComponent(id)}`,
           {
-
             method:
               "GET",
 
@@ -903,12 +880,10 @@ app.get(
           }
         );
 
-
       const dados =
         await lerRespostaJson(
           resposta
         );
-
 
       if (!resposta.ok) {
 
@@ -923,7 +898,6 @@ app.get(
               dados
           });
       }
-
 
       return res.json({
 
@@ -967,7 +941,6 @@ app.get(
           dados.last_modified
       });
 
-
     } catch (erro) {
 
       console.error(
@@ -975,24 +948,641 @@ app.get(
         erro
       );
 
-      return res
-        .status(500)
-        .json({
-          erro:
-            "Erro interno ao consultar a assinatura."
-        });
+      return res.status(500).json({
+        erro:
+          "Erro interno ao consultar a assinatura."
+      });
     }
   }
 );
 
 
-// =========================================
-// INICIAR SERVIDOR
-// =========================================
+// =====================================================
+// SUPABASE - CONFIGURAÇÃO BACKEND
+// =====================================================
+
+function supabaseConfig() {
+
+  const url =
+    String(
+      process.env.SUPABASE_URL || ""
+    )
+      .trim()
+      .replace(/\/$/, "");
+
+  const secretKey =
+    String(
+      process.env.SUPABASE_SECRET_KEY ||
+      ""
+    ).trim();
+
+  if (
+    !url ||
+    !secretKey
+  ) {
+    return null;
+  }
+
+  return {
+    url,
+    secretKey
+  };
+}
+
+
+// =====================================================
+// ATUALIZAR ASSINATURA NO SUPABASE
+// =====================================================
+
+async function atualizarAssinaturaSupabase(
+  email,
+  status,
+  subscriptionEnd = null
+) {
+
+  const config =
+    supabaseConfig();
+
+  if (!config) {
+
+    throw new Error(
+      "SUPABASE_URL ou SUPABASE_SECRET_KEY não configurados."
+    );
+  }
+
+  const emailLimpo =
+    String(email || "")
+      .trim()
+      .toLowerCase();
+
+  if (!emailLimpo) {
+
+    throw new Error(
+      "E-mail do cliente não informado."
+    );
+  }
+
+  const url =
+    `${config.url}/rest/v1/profiles` +
+    `?email=eq.${encodeURIComponent(emailLimpo)}`;
+
+  const body = {
+
+    subscription_status:
+      status,
+
+    subscription_end:
+      subscriptionEnd
+  };
+
+  const resposta =
+    await fetch(
+      url,
+      {
+
+        method:
+          "PATCH",
+
+        headers: {
+
+          "apikey":
+            config.secretKey,
+
+          "Authorization":
+            `Bearer ${config.secretKey}`,
+
+          "Content-Type":
+            "application/json",
+
+          "Prefer":
+            "return=representation"
+        },
+
+        body:
+          JSON.stringify(body)
+      }
+    );
+
+  const texto =
+    await resposta.text();
+
+  let dados = [];
+
+  if (texto) {
+
+    try {
+      dados =
+        JSON.parse(texto);
+    } catch {
+      dados =
+        texto;
+    }
+  }
+
+  if (!resposta.ok) {
+
+    console.error(
+      "Erro Supabase:",
+      resposta.status,
+      dados
+    );
+
+    throw new Error(
+      `Erro ao atualizar Supabase: ${resposta.status}`
+    );
+  }
+
+  console.log(
+    "AYRO SUPABASE ATUALIZADO:",
+    {
+      email:
+        emailLimpo,
+
+      status,
+
+      subscriptionEnd
+    }
+  );
+
+  return dados;
+}
+
+
+// =====================================================
+// CONSULTAR PAGAMENTO MERCADO PAGO
+// =====================================================
+
+async function consultarPagamentoMercadoPago(id) {
+
+  const headers =
+    mercadoPagoHeaders();
+
+  if (!headers) {
+
+    throw new Error(
+      "MERCADOPAGO_ACCESS_TOKEN não configurado."
+    );
+  }
+
+  const resposta =
+    await fetch(
+      `${MP_API}/v1/payments/${encodeURIComponent(id)}`,
+      {
+
+        method:
+          "GET",
+
+        headers
+      }
+    );
+
+  const dados =
+    await lerRespostaJson(
+      resposta
+    );
+
+  if (!resposta.ok) {
+
+    throw new Error(
+      `Erro ao consultar pagamento Mercado Pago: ${resposta.status}`
+    );
+  }
+
+  return dados;
+}
+
+
+// =====================================================
+// CONSULTAR PREAPPROVAL INTERNAMENTE
+// =====================================================
+
+async function consultarPreapprovalMercadoPago(id) {
+
+  const headers =
+    mercadoPagoHeaders();
+
+  if (!headers) {
+
+    throw new Error(
+      "MERCADOPAGO_ACCESS_TOKEN não configurado."
+    );
+  }
+
+  const resposta =
+    await fetch(
+      `${MP_API}/preapproval/${encodeURIComponent(id)}`,
+      {
+
+        method:
+          "GET",
+
+        headers
+      }
+    );
+
+  const dados =
+    await lerRespostaJson(
+      resposta
+    );
+
+  if (!resposta.ok) {
+
+    throw new Error(
+      `Erro ao consultar assinatura Mercado Pago: ${resposta.status}`
+    );
+  }
+
+  return dados;
+}
+
+
+// =====================================================
+// PROCESSAR PAGAMENTO
+// =====================================================
+
+async function processarPagamento(id) {
+
+  const pagamento =
+    await consultarPagamentoMercadoPago(
+      id
+    );
+
+  console.log(
+    "AYRO PAGAMENTO:",
+    {
+
+      id:
+        pagamento.id,
+
+      status:
+        pagamento.status,
+
+      email:
+        pagamento.payer &&
+        pagamento.payer.email
+    }
+  );
+
+  if (
+    pagamento.status !==
+    "approved"
+  ) {
+
+    return {
+
+      processado:
+        true,
+
+      liberado:
+        false,
+
+      status:
+        pagamento.status
+    };
+  }
+
+  const email =
+    pagamento.payer &&
+    pagamento.payer.email;
+
+  if (!email) {
+
+    console.warn(
+      "Pagamento aprovado sem payer.email:",
+      pagamento.id
+    );
+
+    return {
+
+      processado:
+        true,
+
+      liberado:
+        false,
+
+      motivo:
+        "Pagamento sem e-mail."
+    };
+  }
+
+  await atualizarAssinaturaSupabase(
+    email,
+    "active",
+    null
+  );
+
+  return {
+
+    processado:
+      true,
+
+    liberado:
+      true,
+
+    email
+  };
+}
+
+
+// =====================================================
+// PROCESSAR ASSINATURA
+// =====================================================
+
+async function processarAssinatura(id) {
+
+  const assinatura =
+    await consultarPreapprovalMercadoPago(
+      id
+    );
+
+  const email =
+    String(
+      assinatura.payer_email || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  const status =
+    String(
+      assinatura.status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  console.log(
+    "AYRO ASSINATURA:",
+    {
+
+      id:
+        assinatura.id,
+
+      status,
+
+      email,
+
+      plano:
+        assinatura.preapproval_plan_id
+    }
+  );
+
+  if (!email) {
+
+    return {
+
+      processado:
+        true,
+
+      atualizado:
+        false,
+
+      motivo:
+        "Assinatura sem e-mail."
+    };
+  }
+
+  const planoConfigurado =
+    String(
+      process.env.MERCADOPAGO_PLAN_ID ||
+      ""
+    ).trim();
+
+  if (
+    planoConfigurado &&
+    assinatura.preapproval_plan_id &&
+    String(
+      assinatura.preapproval_plan_id
+    ) !== planoConfigurado
+  ) {
+
+    console.warn(
+      "Assinatura pertence a outro plano:",
+      assinatura.preapproval_plan_id
+    );
+
+    return {
+
+      processado:
+        true,
+
+      atualizado:
+        false,
+
+      motivo:
+        "Plano diferente."
+    };
+  }
+
+  if (
+    status === "authorized" ||
+    status === "active"
+  ) {
+
+    await atualizarAssinaturaSupabase(
+      email,
+      "active",
+      null
+    );
+
+    return {
+
+      processado:
+        true,
+
+      atualizado:
+        true,
+
+      acesso:
+        "active"
+    };
+  }
+
+  if (
+    status === "cancelled" ||
+    status === "canceled" ||
+    status === "paused"
+  ) {
+
+    await atualizarAssinaturaSupabase(
+      email,
+      "inactive",
+      new Date().toISOString()
+    );
+
+    return {
+
+      processado:
+        true,
+
+      atualizado:
+        true,
+
+      acesso:
+        "inactive"
+    };
+  }
+
+  return {
+
+    processado:
+      true,
+
+    atualizado:
+      false,
+
+    status
+  };
+}
+
+
+// =====================================================
+// WEBHOOK MERCADO PAGO
+// =====================================================
+
+app.post(
+  "/api/mercadopago/webhook",
+  async (req, res) => {
+
+    // Confirma recebimento imediatamente
+    res.status(200).json({
+      recebido:
+        true
+    });
+
+    try {
+
+      const body =
+        req.body || {};
+
+      const tipo =
+        String(
+          body.type ||
+          body.topic ||
+          req.query.type ||
+          req.query.topic ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
+
+      const id =
+        String(
+          (body.data &&
+            body.data.id) ||
+          body.id ||
+          req.query["data.id"] ||
+          req.query.id ||
+          ""
+        ).trim();
+
+      console.log(
+        "AYRO WEBHOOK RECEBIDO:",
+        {
+          tipo,
+          id
+        }
+      );
+
+      if (!id) {
+
+        console.warn(
+          "Webhook recebido sem ID."
+        );
+
+        return;
+      }
+
+      // -------------------------------------
+      // PAGAMENTO
+      // -------------------------------------
+
+      if (
+        tipo === "payment" ||
+        tipo.includes("payment")
+      ) {
+
+        await processarPagamento(
+          id
+        );
+
+        return;
+      }
+
+      // -------------------------------------
+      // ASSINATURA
+      // -------------------------------------
+
+      if (
+        tipo ===
+          "subscription_preapproval" ||
+        tipo ===
+          "preapproval" ||
+        tipo.includes(
+          "preapproval"
+        )
+      ) {
+
+        await processarAssinatura(
+          id
+        );
+
+        return;
+      }
+
+      console.log(
+        "Webhook ignorado:",
+        tipo
+      );
+
+    } catch (erro) {
+
+      console.error(
+        "ERRO WEBHOOK AYRO:",
+        erro
+      );
+    }
+  }
+);
+
+
+// =====================================================
+// TESTE WEBHOOK / CONFIGURAÇÕES
+// =====================================================
+
+app.get(
+  "/api/mercadopago/webhook",
+  (req, res) => {
+
+    res.json({
+
+      status:
+        "Webhook AYRO ACM online",
+
+      mercado_pago:
+        Boolean(
+          process.env.MERCADOPAGO_ACCESS_TOKEN
+        ),
+
+      plano:
+        Boolean(
+          process.env.MERCADOPAGO_PLAN_ID
+        ),
+
+      supabase:
+        Boolean(
+          process.env.SUPABASE_URL &&
+          process.env.SUPABASE_SECRET_KEY
+        )
+    });
+  }
+);
+
+
+// =====================================================
+// SERVIDOR
+// =====================================================
 
 const PORT =
   process.env.PORT || 3000;
-
 
 app.listen(
   PORT,
