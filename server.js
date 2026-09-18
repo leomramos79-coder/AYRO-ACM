@@ -6,121 +6,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
-
-// ======================================================
-// AYRO ACM PRO
-// API
-// ======================================================
-
 app.get("/", (req, res) => {
   res.json({
     status: "AYRO ACM API online",
-    versao: "PRECISAO-V2",
+    versao: "PRECISAO-V3",
     minimo_comparaveis: 3
   });
 });
-
-// ======================================================
-// FUNÇÕES AUXILIARES
-// ======================================================
-
-function normalizar(texto = "") {
-  return String(texto)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function extrairPreco(texto = "") {
-  const encontrados =
-    String(texto).match(/R\$\s*[\d.]+(?:,\d{2})?/gi) || [];
-
-  for (const encontrado of encontrados) {
-    const valor = Number(
-      encontrado
-        .replace(/R\$/gi, "")
-        .replace(/\s/g, "")
-        .replace(/\./g, "")
-        .replace(",", ".")
-    );
-
-    if (valor >= 50000) {
-      return {
-        texto: encontrado.trim(),
-        valor
-      };
-    }
-  }
-
-  return {
-    texto: "",
-    valor: 0
-  };
-}
-
-function extrairArea(texto = "") {
-  const regex =
-    /(\d+(?:[.,]\d+)?)\s*m(?:²|2)(?![a-z0-9])/gi;
-
-  const encontrados = [
-    ...String(texto).matchAll(regex)
-  ];
-
-  for (const encontrado of encontrados) {
-    const valor = Number(
-      encontrado[1].replace(",", ".")
-    );
-
-    if (valor >= 15 && valor <= 1000000) {
-      return {
-        texto: `${encontrado[1]} m²`,
-        valor
-      };
-    }
-  }
-
-  return {
-    texto: "",
-    valor: 0
-  };
-}
-
-function mediana(valores = []) {
-  if (!valores.length) return 0;
-
-  const lista = [...valores]
-    .filter(v => Number.isFinite(v) && v > 0)
-    .sort((a, b) => a - b);
-
-  if (!lista.length) return 0;
-
-  const meio = Math.floor(lista.length / 2);
-
-  if (lista.length % 2) {
-    return lista[meio];
-  }
-
-  return (
-    lista[meio - 1] +
-    lista[meio]
-  ) / 2;
-}
-
-// ======================================================
-// PESQUISA DE COMPARÁVEIS
-// ======================================================
 
 app.get(
   ["/api/pesquisar", "/api/search", "/search"],
   async (req, res) => {
     try {
-      const q = String(req.query.q || "").trim();
+      const { q } = req.query;
 
       if (!q) {
         return res.status(400).json({
-          erro: "Informe os dados do imóvel."
+          erro: "Informe uma pesquisa."
         });
       }
 
@@ -128,367 +30,359 @@ app.get(
 
       if (!apiKey) {
         return res.status(500).json({
-          erro: "SERPAPI_KEY não configurada."
+          erro: "SERPAPI_KEY não configurada no servidor."
         });
       }
 
-      // ==================================================
-      // IDENTIFICAR DADOS DO IMÓVEL PESQUISADO
-      // ==================================================
+      // =========================================
+      // PESQUISA OTIMIZADA
+      // =========================================
 
-      let tipoBusca = "";
+      const buscaOtimizada =
+        q +
+        " imóvel à venda anúncio" +
+        " preço R$" +
+        " m²" +
+        " -youtube -instagram -facebook -tiktok";
 
-      if (/apartamento|apto/i.test(q)) {
-        tipoBusca = "apartamento";
-      } else if (/cobertura/i.test(q)) {
-        tipoBusca = "cobertura";
-      } else if (/casa em condomínio/i.test(q)) {
-        tipoBusca = "casa";
-      } else if (/\bcasa\b/i.test(q)) {
-        tipoBusca = "casa";
-      } else if (/terreno|lote/i.test(q)) {
-        tipoBusca = "terreno";
-      } else if (/galpão|galpao/i.test(q)) {
-        tipoBusca = "galpao";
-      } else if (/loja|comercial/i.test(q)) {
-        tipoBusca = "comercial";
-      } else if (/sítio|sitio|fazenda|chácara|chacara/i.test(q)) {
-        tipoBusca = "sitio";
+      const url =
+        "https://serpapi.com/search.json?engine=google" +
+        "&q=" +
+        encodeURIComponent(buscaOtimizada) +
+        "&location=Brazil" +
+        "&hl=pt-br" +
+        "&gl=br" +
+        "&num=20" +
+        "&api_key=" +
+        encodeURIComponent(apiKey);
+
+      const resposta = await fetch(url);
+      const dados = await resposta.json();
+
+      if (!resposta.ok || dados.error) {
+        return res.status(500).json({
+          erro:
+            dados.error ||
+            "Erro ao consultar a SerpApi."
+        });
       }
 
+      // =========================================
+      // IDENTIFICA TIPO DO IMÓVEL
+      // =========================================
+
+      const tipoBusca =
+        /apartamento|apto/i.test(q)
+          ? "apartamento"
+          : /\bcasa\b/i.test(q)
+          ? "casa"
+          : "";
+
+      // =========================================
+      // IDENTIFICA QUANTIDADE DE QUARTOS
+      // =========================================
+
       const quartosMatch =
-        q.match(/(\d+)\s*(?:quartos?|dormitórios?)/i);
+        q.match(/(\d+)\s*quartos?/i);
 
       const quartosBusca =
         quartosMatch
           ? Number(quartosMatch[1])
           : null;
 
+      // =========================================
+      // IDENTIFICA ÁREA DO IMÓVEL AVALIADO
+      // =========================================
+
       const areaMatch =
-        q.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i);
+        q.match(
+          /(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i
+        );
 
       const areaBusca =
         areaMatch
-          ? Number(areaMatch[1].replace(",", "."))
+          ? Number(
+              areaMatch[1].replace(",", ".")
+            )
           : null;
 
-      // Bairro vindo do frontend.
-      const bairroInformado =
-        String(req.query.bairro || "").trim();
+      // =========================================
+      // PROCESSA RESULTADOS DO GOOGLE
+      // =========================================
 
-      const cidadeInformada =
-        String(req.query.cidade || "Teresópolis").trim();
+      const resultados =
+        (dados.organic_results || [])
+          .map(item => {
+            const titulo =
+              item.title || "";
 
-      const ufInformada =
-        String(req.query.uf || "RJ").trim();
+            const descricao =
+              item.snippet || "";
 
-      // ==================================================
-      // CONSULTAS
-      // ==================================================
+            const texto =
+              `${titulo} ${descricao}`;
 
-      const localPesquisa =
-        bairroInformado
-          ? `"${bairroInformado}" "${cidadeInformada}"`
-          : `"${cidadeInformada}"`;
+            // =====================================
+            // PROCURA PREÇOS
+            // =====================================
 
-      const consultas = [
-        `${q} ${localPesquisa} imóvel venda R$ m² site:imovelweb.com.br/propriedades/`,
-
-        `${q} ${localPesquisa} imóvel venda R$ m² site:olx.com.br`,
-
-        `${q} ${localPesquisa} imóvel venda R$ m² site:zapimoveis.com.br`,
-
-        `${q} ${localPesquisa} imóvel venda R$ m² site:vivareal.com.br`,
-
-        `${q} ${localPesquisa} imóvel venda R$ m² site:chavesnamao.com.br`,
-
-        `${q} ${localPesquisa} imóvel venda R$ m² site:kenlo.com.br`
-      ];
-
-      const coletados = [];
-
-      for (const consulta of consultas) {
-        const url =
-          "https://serpapi.com/search.json" +
-          "?engine=google" +
-          "&q=" + encodeURIComponent(consulta) +
-          "&location=Brazil" +
-          "&hl=pt-br" +
-          "&gl=br" +
-          "&num=20" +
-          "&api_key=" + encodeURIComponent(apiKey);
-
-        try {
-          const resposta = await fetch(url);
-          const dados = await resposta.json();
-
-          if (resposta.ok && !dados.error) {
-            coletados.push(
-              ...(dados.organic_results || [])
-            );
-          }
-        } catch (erro) {
-          console.error(
-            "Erro consulta SerpAPI:",
-            erro
-          );
-        }
-      }
-
-      // ==================================================
-      // DOMÍNIOS PERMITIDOS
-      // ==================================================
-
-      const dominiosImobiliarios =
-        /olx\.com\.br|zapimoveis\.com\.br|vivareal\.com\.br|chavesnamao\.com\.br|imovelweb\.com\.br|wimoveis\.com\.br|kenlo\.com\.br|quintoandar\.com\.br|casamineira\.com\.br/i;
-
-      const bloqueados =
-        /instagram\.com|facebook\.com|youtube\.com|tiktok\.com|g1\.globo\.com|globo\.com|gov\.br|prefeitura|turismo|notícia|noticia|acidente/i;
-
-      // ==================================================
-      // ANALISAR RESULTADOS
-      // ==================================================
-
-      const resultados = coletados
-        .map(item => {
-          const titulo =
-            item.title || "";
-
-          const descricao =
-            item.snippet || "";
-
-          const link =
-            item.link || "";
-
-          const fonte =
-            item.source ||
-            item.displayed_link ||
-            "";
-
-          const texto =
-            `${titulo} ${descricao}`;
-
-          const preco =
-            extrairPreco(
-              `${item.price || ""} ${texto}`
-            );
-
-          const area =
-            extrairArea(texto);
-
-          // ==============================================
-          // TIPO
-          // ==============================================
-
-          let tipoOk = true;
-
-          if (tipoBusca === "apartamento") {
-            tipoOk =
-              /apartamento|apto|flat|studio/i.test(texto) &&
-              !/\bcasa\b/i.test(texto);
-          }
-
-          if (tipoBusca === "casa") {
-            tipoOk =
-              /\bcasa\b|sobrado|condomínio|condominio/i.test(texto) &&
-              !/apartamento|apto/i.test(texto);
-          }
-
-          if (tipoBusca === "cobertura") {
-            tipoOk =
-              /cobertura/i.test(texto);
-          }
-
-          if (tipoBusca === "terreno") {
-            tipoOk =
-              /terreno|lote/i.test(texto);
-          }
-
-          if (tipoBusca === "galpao") {
-            tipoOk =
-              /galpão|galpao/i.test(texto);
-          }
-
-          if (tipoBusca === "comercial") {
-            tipoOk =
-              /loja|comercial|sala/i.test(texto);
-          }
-
-          if (tipoBusca === "sitio") {
-            tipoOk =
-              /sítio|sitio|fazenda|chácara|chacara/i.test(texto);
-          }
-
-          // ==============================================
-          // QUARTOS
-          // ==============================================
-
-          let quartosOk = true;
-
-          if (
-            quartosBusca &&
-            ["apartamento", "casa", "cobertura"].includes(tipoBusca)
-          ) {
-            const quartosResultado =
+            const precos =
               texto.match(
-                /(\d+)\s*(?:quartos?|dormitórios?)/i
-              );
+                /R\$\s?[\d.]+(?:,\d{2})?/g
+              ) || [];
 
-            if (quartosResultado) {
-              quartosOk =
-                Math.abs(
-                  Number(quartosResultado[1]) -
-                  quartosBusca
-                ) <= 1;
+            // Evita condomínio, IPTU etc.
+            const precosValidos =
+              precos.filter(p => {
+                const valor =
+                  Number(
+                    p
+                      .replace(
+                        /R\$\s?/i,
+                        ""
+                      )
+                      .replace(/\./g, "")
+                      .replace(",", ".")
+                      .trim()
+                  );
+
+                return valor >= 50000;
+              });
+
+            const preco =
+              item.price ||
+              precosValidos[0] ||
+              "";
+
+            // =====================================
+            // PROCURA ÁREA
+            // =====================================
+
+            const areas =
+              texto.match(
+                /\d+(?:[.,]\d+)?\s?m²/gi
+              ) || [];
+
+            const area =
+              areas[0] || "";
+
+            const areaResultado =
+              area
+                ? Number(
+                    area
+                      .replace(/m²/i, "")
+                      .trim()
+                      .replace(",", ".")
+                  )
+                : null;
+
+            // =====================================
+            // CONVERTE PREÇO PARA NÚMERO
+            // =====================================
+
+            const precoValor =
+              preco
+                ? Number(
+                    String(preco)
+                      .replace(
+                        /R\$\s?/i,
+                        ""
+                      )
+                      .replace(/\./g, "")
+                      .replace(",", ".")
+                      .replace(
+                        /[^0-9.]/g,
+                        ""
+                      )
+                  ) || null
+                : null;
+
+            // =====================================
+            // CONFERE TIPO
+            // =====================================
+
+            let tipoOk = true;
+
+            if (
+              tipoBusca ===
+              "apartamento"
+            ) {
+              tipoOk =
+                /apartamento|apto|flat|studio/i
+                  .test(texto) &&
+                !/\bcasa\b/i.test(texto);
             }
-          }
 
-          // ==============================================
-          // ÁREA - MÁXIMO 30% DE DIFERENÇA
-          // ==============================================
+            if (
+              tipoBusca === "casa"
+            ) {
+              tipoOk =
+                /\bcasa\b|sobrado/i
+                  .test(texto) &&
+                !/apartamento|apto/i
+                  .test(texto);
+            }
 
-          let areaOk =
-            Boolean(area.valor);
+            // =====================================
+            // CONFERE QUARTOS
+            // =====================================
 
-          let diferencaArea = null;
+            let quartosOk = true;
 
-          if (areaBusca && area.valor) {
-            diferencaArea =
-              Math.abs(
-                area.valor - areaBusca
-              ) / areaBusca;
+            if (quartosBusca) {
+              const regexQuartos =
+                new RegExp(
+                  "\\b" +
+                    quartosBusca +
+                    "\\s*(?:quartos?|dormitórios?)",
+                  "i"
+                );
 
-            areaOk =
-              diferencaArea <= 0.30;
-          }
+              quartosOk =
+                regexQuartos.test(
+                  texto
+                );
+            }
 
-          // ==============================================
-          // BAIRRO
-          // ==============================================
+            // =====================================
+            // CONFERE ÁREA
+            // =====================================
 
-          let bairroOk = true;
+            let areaOk = true;
 
-          if (bairroInformado) {
-            bairroOk =
-              normalizar(texto).includes(
-                normalizar(bairroInformado)
+            if (
+              areaBusca &&
+              areaResultado
+            ) {
+              const diferenca =
+                Math.abs(
+                  areaResultado -
+                    areaBusca
+                ) / areaBusca;
+
+              // Até 35% de diferença
+              areaOk =
+                diferenca <= 0.35;
+            }
+
+            // =====================================
+            // EXCLUI REDES SOCIAIS
+            // =====================================
+
+            const social =
+              /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i
+                .test(
+                  item.link || ""
+                );
+
+            // =====================================
+            // EXCLUI PÁGINAS COLETIVAS
+            // =====================================
+
+            const paginaColetiva =
+              /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
+                .test(texto) ||
+              /imóveis\s+(?:para|à)\s+venda/i
+                .test(titulo) ||
+              /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i
+                .test(titulo);
+
+            // =====================================
+            // VALIDAÇÃO FINAL
+            // =====================================
+
+            const temPreco =
+              Boolean(precoValor);
+
+            const temArea =
+              Boolean(
+                areaResultado
               );
-          }
 
-          // ==============================================
-          // CIDADE
-          // ==============================================
-
-          let cidadeOk = true;
-
-          if (cidadeInformada) {
-            cidadeOk =
-              normalizar(texto).includes(
-                normalizar(cidadeInformada)
+            const temLink =
+              Boolean(
+                item.link
               );
-          }
 
-          // ==============================================
-          // PÁGINAS COLETIVAS
-          // ==============================================
+            const comparavelValido =
+              temLink &&
+              temPreco &&
+              temArea &&
+              tipoOk &&
+              quartosOk &&
+              areaOk &&
+              !social &&
+              !paginaColetiva;
 
-          const paginaColetiva =
-            /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
-              .test(titulo) ||
-            /imóveis\s+(?:para|à)\s+venda/i
-              .test(titulo) ||
-            /casas\s+(?:para|à)\s+venda/i
-              .test(titulo) ||
-            /apartamentos\s+(?:para|à)\s+venda/i
-              .test(titulo);
+            // =====================================
+            // R$/M²
+            // =====================================
 
-          const dominioOk =
-            dominiosImobiliarios.test(link);
+            const precoM2 =
+              precoValor &&
+              areaResultado
+                ? Math.round(
+                    precoValor /
+                      areaResultado
+                  )
+                : null;
 
-          const bloqueado =
-            bloqueados.test(
-              `${link} ${fonte} ${texto}`
+            console.log(
+              "DIAGNOSTICO AYRO",
+              {
+                titulo,
+                precoValor,
+                areaResultado,
+                precoM2,
+                tipoOk,
+                quartosOk,
+                areaOk,
+                social,
+                paginaColetiva,
+                comparavelValido
+              }
             );
 
-          // ==============================================
-          // VALIDAÇÃO FINAL
-          // ==============================================
+            return {
+              titulo,
+              descricao,
 
-          const comparavelValido =
-            Boolean(link) &&
-            dominioOk &&
-            !bloqueado &&
-            !paginaColetiva &&
-            Boolean(preco.valor) &&
-            Boolean(area.valor) &&
-            tipoOk &&
-            quartosOk &&
-            areaOk &&
-            bairroOk &&
-            cidadeOk;
+              link:
+                item.link || "",
 
-          const valorM2 =
-            preco.valor && area.valor
-              ? preco.valor / area.valor
-              : 0;
+              fonte:
+                item.source ||
+                item.displayed_link ||
+                "",
 
-          return {
-            titulo,
-            descricao,
-            link,
-            fonte,
+              preco,
 
-            bairro:
-              bairroInformado,
+              preco_valor:
+                precoValor,
 
-            cidade:
-              cidadeInformada,
+              area,
 
-            uf:
-              ufInformada,
+              area_valor:
+                areaResultado,
 
-            preco:
-              preco.texto,
+              preco_m2:
+                precoM2,
 
-            preco_valor:
-              preco.valor,
+              comparavel_valido:
+                comparavelValido
+            };
+          })
 
-            area:
-              area.texto,
+          // Só mantém resultados
+          // que possuem link
+          .filter(
+            item =>
+              item.link
+          );
 
-            area_valor:
-              area.valor,
-
-            valor_m2:
-              valorM2,
-
-            diferenca_area:
-              diferencaArea,
-
-            tipo_ok:
-              tipoOk,
-
-            quartos_ok:
-              quartosOk,
-
-            bairro_ok:
-              bairroOk,
-
-            cidade_ok:
-              cidadeOk,
-
-            area_ok:
-              areaOk,
-
-            comparavel_valido:
-              comparavelValido
-          };
-        })
-        .filter(item => item.link);
-
-      // ==================================================
-      // REMOVER LINKS DUPLICADOS
-      // ==================================================
+      // =========================================
+      // REMOVE LINKS DUPLICADOS
+      // =========================================
 
       const linksVistos =
         new Set();
@@ -500,198 +394,56 @@ app.get(
               .split("?")[0]
               .replace(/\/$/, "");
 
-          if (linksVistos.has(linkLimpo)) {
+          if (
+            linksVistos.has(
+              linkLimpo
+            )
+          ) {
             return false;
           }
 
-          linksVistos.add(linkLimpo);
+          linksVistos.add(
+            linkLimpo
+          );
 
           return true;
         });
 
-      // ==================================================
-      // PRIMEIRA SELEÇÃO
-      // ==================================================
+      // =========================================
+      // COMPARÁVEIS VÁLIDOS
+      // =========================================
 
-      let comparaveis =
+      const comparaveis =
         resultadosUnicos.filter(
           item =>
             item.comparavel_valido
         );
 
-      // ==================================================
-      // REMOVER DUPLICIDADE DE PREÇO + ÁREA
-      // ==================================================
-
-      const chavesComparaveis =
-        new Set();
-
-      comparaveis =
-        comparaveis.filter(item => {
-          const chave =
-            `${Math.round(
-              item.preco_valor / 1000
-            )}-${Math.round(
-              item.area_valor
-            )}`;
-
-          if (
-            chavesComparaveis.has(chave)
-          ) {
-            return false;
-          }
-
-          chavesComparaveis.add(chave);
-
-          return true;
-        });
-
-      // ==================================================
-      // REMOVER OUTLIERS DE R$/M²
-      // ==================================================
-
-      if (comparaveis.length >= 3) {
-        const valoresM2 =
-          comparaveis.map(
-            item => item.valor_m2
-          );
-
-        const medianaM2 =
-          mediana(valoresM2);
-
-        comparaveis =
-          comparaveis.filter(item => {
-            const diferenca =
-              Math.abs(
-                item.valor_m2 -
-                medianaM2
-              ) / medianaM2;
-
-            // Até 30% da mediana.
-            return diferenca <= 0.30;
-          });
-      }
-
-      // ==================================================
-      // ORDENAR POR PROXIMIDADE DE ÁREA
-      // ==================================================
-
-      comparaveis.sort((a, b) => {
-        const da =
-          areaBusca
-            ? Math.abs(
-                a.area_valor -
-                areaBusca
-              )
-            : 0;
-
-        const db =
-          areaBusca
-            ? Math.abs(
-                b.area_valor -
-                areaBusca
-              )
-            : 0;
-
-        return da - db;
-      });
-
-      comparaveis =
-        comparaveis.slice(0, 8);
-
-      // ==================================================
-      // CALCULAR ACM
-      // ==================================================
-
-      let calculo = null;
-
-      if (
-        comparaveis.length >= 3 &&
-        areaBusca
-      ) {
-        const valoresM2 =
-          comparaveis.map(
-            item => item.valor_m2
-          );
-
-        const valorM2Recomendado =
-          mediana(valoresM2);
-
-        const valorMercado =
-          valorM2Recomendado *
-          areaBusca;
-
-        const vendaRapida =
-          valorMercado * 0.95;
-
-        const valorSuperior =
-          valorMercado * 1.07;
-
-        calculo = {
-          quantidade_comparaveis:
-            comparaveis.length,
-
-          area_avaliada:
-            areaBusca,
-
-          valor_m2_recomendado:
-            Math.round(
-              valorM2Recomendado
-            ),
-
-          venda_rapida:
-            Math.round(
-              vendaRapida
-            ),
-
-          valor_mercado_recomendado:
-            Math.round(
-              valorMercado
-            ),
-
-          valor_superior_anuncio:
-            Math.round(
-              valorSuperior
-            )
-        };
-      }
-
-      // ==================================================
-      // REFERÊNCIAS
-      // ==================================================
-
-      const linksComparaveis =
-        new Set(
-          comparaveis.map(
-            item => item.link
-          )
-        );
+      // =========================================
+      // REFERÊNCIAS DESCARTADAS
+      // =========================================
 
       const referencias =
-        resultadosUnicos
-          .filter(
-            item =>
-              !linksComparaveis.has(
-                item.link
-              )
-          )
-          .slice(0, 12);
+        resultadosUnicos.filter(
+          item =>
+            !item.comparavel_valido
+        );
 
-      // ==================================================
+      // =========================================
       // RESPOSTA
-      // ==================================================
+      // =========================================
 
       return res.json({
         sucesso: true,
 
         versao:
-          "PRECISAO-V2",
+          "PRECISAO-V3",
 
         minimo_comparaveis:
           3,
 
-        amostra_suficiente:
-          comparaveis.length >= 3,
+        total:
+          resultadosUnicos.length,
 
         total_comparaveis:
           comparaveis.length,
@@ -700,337 +452,37 @@ app.get(
 
         referencias,
 
-        calculo,
-
-        mensagem:
-          comparaveis.length >= 3
-            ? "Amostra suficiente para cálculo do ACM."
-            : `Foram encontrados ${comparaveis.length} comparáveis válidos. São necessários no mínimo 3 para calcular o ACM.`
+        // Compatibilidade com
+        // o index atual
+        resultados:
+          resultadosUnicos
       });
+
     } catch (erro) {
       console.error(
-        "Erro pesquisa AYRO:",
+        "ERRO AYRO:",
         erro
       );
 
-      return res.status(500).json({
-        erro:
-          "Erro interno na pesquisa de comparáveis."
-      });
-    }
-  }
-);
-
-// ======================================================
-// MERCADO PAGO
-// ======================================================
-
-const MP_API =
-  "https://api.mercadopago.com";
-
-const AYRO_BACK_URL =
-  process.env.AYRO_BACK_URL ||
-  "https://ayro-acm.onrender.com";
-
-function mercadoPagoHeaders() {
-  const token =
-    process.env.MERCADOPAGO_ACCESS_TOKEN;
-
-  if (!token) return null;
-
-  return {
-    Authorization:
-      `Bearer ${token}`,
-    "Content-Type":
-      "application/json"
-  };
-}
-
-async function lerRespostaJson(resposta) {
-  const texto =
-    await resposta.text();
-
-  if (!texto) return {};
-
-  try {
-    return JSON.parse(texto);
-  } catch {
-    return {
-      message: texto
-    };
-  }
-}
-
-// ======================================================
-// CRIAR PLANO
-// ======================================================
-
-app.post(
-  "/api/mercadopago/criar-plano",
-  async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
-
-      if (!headers) {
-        return res.status(500).json({
-          erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado."
-        });
-      }
-
-      const plano = {
-        reason:
-          "AYRO ACM Pro",
-
-        external_reference:
-          `AYRO-ACM-PRO-${Date.now()}`,
-
-        auto_recurring: {
-          frequency: 1,
-          frequency_type:
-            "months",
-          transaction_amount:
-            49.90,
-          currency_id:
-            "BRL"
-        },
-
-        back_url:
-          AYRO_BACK_URL
-      };
-
-      const resposta =
-        await fetch(
-          `${MP_API}/preapproval_plan`,
-          {
-            method: "POST",
-            headers,
-            body:
-              JSON.stringify(plano)
-          }
-        );
-
-      const dados =
-        await lerRespostaJson(
-          resposta
-        );
-
-      if (!resposta.ok) {
-        return res
-          .status(resposta.status)
-          .json({
-            erro:
-              "Não foi possível criar o plano.",
-            detalhes:
-              dados
-          });
-      }
-
-      return res.json({
-        sucesso: true,
-        plano_id:
-          dados.id,
-        status:
-          dados.status,
-        checkout_url:
-          dados.init_point,
-        init_point:
-          dados.init_point
-      });
-    } catch (erro) {
-      console.error(erro);
-
-      return res.status(500).json({
-        erro:
-          "Erro interno no Mercado Pago."
-      });
-    }
-  }
-);
-
-// ======================================================
-// CRIAR / REUTILIZAR ASSINATURA
-// ======================================================
-
-app.post(
-  "/api/mercadopago/criar-assinatura",
-  async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
-
-      if (!headers) {
-        return res.status(500).json({
-          erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado."
-        });
-      }
-
-      const planoId =
-        String(
-          process.env.MERCADOPAGO_PLAN_ID ||
-          ""
-        ).trim();
-
-      if (planoId) {
-        const resposta =
-          await fetch(
-            `${MP_API}/preapproval_plan/${encodeURIComponent(
-              planoId
-            )}`,
-            {
-              method: "GET",
-              headers
-            }
-          );
-
-        const plano =
-          await lerRespostaJson(
-            resposta
-          );
-
-        if (!resposta.ok) {
-          return res
-            .status(resposta.status)
-            .json({
-              erro:
-                "Não foi possível consultar o plano.",
-              detalhes:
-                plano
-            });
-        }
-
-        return res.json({
-          sucesso: true,
-          plano_id:
-            plano.id,
-          status:
-            plano.status,
-          checkout_url:
-            plano.init_point,
-          init_point:
-            plano.init_point
-        });
-      }
-
-      return res.status(500).json({
-        erro:
-          "MERCADOPAGO_PLAN_ID não configurado."
-      });
-    } catch (erro) {
-      console.error(erro);
-
-      return res.status(500).json({
-        erro:
-          "Erro interno no Mercado Pago."
-      });
-    }
-  }
-);
-
-// ======================================================
-// CONSULTAR PLANO
-// ======================================================
-
-app.get(
-  "/api/mercadopago/consultar-plano/:id",
-  async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
-
-      if (!headers) {
-        return res.status(500).json({
-          erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado."
-        });
-      }
-
-      const resposta =
-        await fetch(
-          `${MP_API}/preapproval_plan/${encodeURIComponent(
-            req.params.id
-          )}`,
-          {
-            method: "GET",
-            headers
-          }
-        );
-
-      const dados =
-        await lerRespostaJson(
-          resposta
-        );
-
       return res
-        .status(resposta.status)
-        .json(dados);
-    } catch (erro) {
-      console.error(erro);
-
-      return res.status(500).json({
-        erro:
-          "Erro ao consultar plano."
-      });
-    }
-  }
-);
-
-// ======================================================
-// CONSULTAR ASSINATURA
-// ======================================================
-
-app.get(
-  "/api/mercadopago/consultar-assinatura/:id",
-  async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
-
-      if (!headers) {
-        return res.status(500).json({
+        .status(500)
+        .json({
           erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado."
+            "Erro interno na pesquisa."
         });
-      }
-
-      const resposta =
-        await fetch(
-          `${MP_API}/preapproval/${encodeURIComponent(
-            req.params.id
-          )}`,
-          {
-            method: "GET",
-            headers
-          }
-        );
-
-      const dados =
-        await lerRespostaJson(
-          resposta
-        );
-
-      return res
-        .status(resposta.status)
-        .json(dados);
-    } catch (erro) {
-      console.error(erro);
-
-      return res.status(500).json({
-        erro:
-          "Erro ao consultar assinatura."
-      });
     }
   }
 );
 
-// ======================================================
-// INICIAR
-// ======================================================
+// =============================================
+// INICIA SERVIDOR
+// =============================================
+
+const PORT =
+  process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(
-    `AYRO ACM API PRECISAO-V2 rodando na porta ${PORT}`
+    `AYRO ACM API PRECISAO-V3 rodando na porta ${PORT}`
   );
 });
