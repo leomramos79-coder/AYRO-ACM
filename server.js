@@ -10,926 +10,792 @@ app.get("/", (req, res) => {
   res.json({ status: "AYRO ACM API online" });
 });
 
+app.get(["/api/pesquisar", "/api/search", "/search"], async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
 
-// ======================================================
-// PESQUISA AYRO ACM
-// ======================================================
+    if (!q) {
+      return res.status(400).json({
+        erro: "Informe uma pesquisa."
+      });
+    }
 
-app.get(
-  ["/api/pesquisar", "/api/search", "/search"],
-  async (req, res) => {
-    try {
-      const { q } = req.query;
+    const apiKey = process.env.SERPAPI_KEY;
 
-      if (!q) {
-        return res.status(400).json({
-          erro: "Informe uma pesquisa."
-        });
-      }
+    if (!apiKey) {
+      return res.status(500).json({
+        erro: "SERPAPI_KEY não configurada no servidor."
+      });
+    }
 
-      const apiKey = process.env.SERPAPI_KEY;
+    const tipoBusca =
+      /apartamento|apto/i.test(q) ? "apartamento" :
+      /casa em condomínio/i.test(q) ? "casa" :
+      /\bcasa\b/i.test(q) ? "casa" :
+      /cobertura/i.test(q) ? "cobertura" :
+      /terreno/i.test(q) ? "terreno" :
+      /galpão|galpao/i.test(q) ? "galpao" :
+      /loja|comercial/i.test(q) ? "comercial" :
+      /sítio|sitio|fazenda/i.test(q) ? "sitio" :
+      "";
 
-      if (!apiKey) {
-        return res.status(500).json({
-          erro: "SERPAPI_KEY não configurada no servidor."
-        });
-      }
+    const quartosMatch = q.match(/(\d+)\s*quartos?/i);
+    const quartosBusca = quartosMatch
+      ? Number(quartosMatch[1])
+      : null;
 
-      const buscaOtimizada =
-        q +
-        " imóvel à venda anúncio" +
-        " preço R$" +
-        " m²" +
-        " -youtube -instagram -facebook -tiktok";
+    const areaMatch =
+      q.match(/(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i);
+
+    const areaBusca = areaMatch
+      ? Number(areaMatch[1].replace(",", "."))
+      : null;
+
+    // =====================================
+    // BUSCAS EM PORTAIS IMOBILIÁRIOS
+    // =====================================
+
+    const consultas = [
+      `${q} (site:olx.com.br OR site:zapimoveis.com.br OR site:vivareal.com.br) imóvel venda R$ m²`,
+
+      `${q} (site:chavesnamao.com.br OR site:imovelweb.com.br OR site:wimoveis.com.br) imóvel venda R$ m²`,
+
+      `${q} (site:kenlo.com.br OR site:quintoandar.com.br OR site:casamineira.com.br) imóvel venda R$ m²`
+    ];
+
+    const coletados = [];
+
+    for (const consulta of consultas) {
 
       const url =
         "https://serpapi.com/search.json?engine=google" +
-        "&q=" +
-        encodeURIComponent(buscaOtimizada) +
+        "&q=" + encodeURIComponent(consulta) +
         "&location=Brazil" +
         "&hl=pt-br" +
         "&gl=br" +
         "&num=20" +
-        "&api_key=" +
-        encodeURIComponent(apiKey);
+        "&api_key=" + encodeURIComponent(apiKey);
 
       const resposta = await fetch(url);
       const dados = await resposta.json();
 
       if (!resposta.ok || dados.error) {
-        return res.status(500).json({
-          erro: dados.error || "Erro ao consultar a SerpApi."
-        });
+
+        console.error(
+          "SerpAPI:",
+          dados.error || resposta.status
+        );
+
+        continue;
       }
 
-      const tipoBusca = /apartamento|apto/i.test(q)
-        ? "apartamento"
-        : /\bcasa\b/i.test(q)
-        ? "casa"
-        : "";
-
-      const quartosMatch = q.match(/(\d+)\s*quartos?/i);
-
-      const quartosBusca = quartosMatch
-        ? Number(quartosMatch[1])
-        : null;
-
-      const areaMatch = q.match(
-        /(\d+(?:[.,]\d+)?)\s*m(?:²|2)/i
+      coletados.push(
+        ...(dados.organic_results || [])
       );
+    }
 
-      const areaBusca = areaMatch
-        ? Number(areaMatch[1].replace(",", "."))
-        : null;
+    // =====================================
+    // PORTAIS ACEITOS
+    // =====================================
 
-      const resultados = (dados.organic_results || [])
+    const dominiosImobiliarios =
+      /olx\.com\.br|zapimoveis\.com\.br|vivareal\.com\.br|chavesnamao\.com\.br|imovelweb\.com\.br|wimoveis\.com\.br|kenlo\.com\.br|quintoandar\.com\.br|casamineira\.com\.br/i;
+
+    // Bloqueia notícias, redes sociais,
+    // prefeitura etc.
+    const bloqueados =
+      /instagram\.com|facebook\.com|youtube\.com|tiktok\.com|g1\.globo\.com|globo\.com|gov\.br|\.rj\.gov\.br|prefeitura|turismo|notícia|noticia|acidente/i;
+
+    // =====================================
+    // IDENTIFICAR PREÇO
+    // =====================================
+
+    function numeroPreco(texto) {
+
+      const achados =
+        texto.match(
+          /R\$\s*[\d.]+(?:,\d{2})?/g
+        ) || [];
+
+      for (const p of achados) {
+
+        const n = Number(
+          p
+            .replace(/R\$\s*/i, "")
+            .replace(/\./g, "")
+            .replace(",", ".")
+        );
+
+        if (n >= 50000) {
+
+          return {
+            texto: p,
+            valor: n
+          };
+
+        }
+      }
+
+      return {
+        texto: "",
+        valor: 0
+      };
+    }
+
+    // =====================================
+    // IDENTIFICAR ÁREA
+    // =====================================
+
+    function numeroArea(texto) {
+
+      const achados = [
+        ...texto.matchAll(
+          /(\d+(?:[.,]\d+)?)\s*m(?:²|2)\b/gi
+        )
+      ];
+
+      for (const m of achados) {
+
+        const n = Number(
+          m[1].replace(",", ".")
+        );
+
+        if (
+          n >= 15 &&
+          n <= 1000000
+        ) {
+
+          return {
+            texto: `${m[1]} m²`,
+            valor: n
+          };
+
+        }
+      }
+
+      return {
+        texto: "",
+        valor: 0
+      };
+    }
+
+    // =====================================
+    // ANALISAR RESULTADOS
+    // =====================================
+
+    const resultados =
+      coletados
         .map(item => {
-          const titulo = item.title || "";
-          const descricao = item.snippet || "";
-          const texto = `${titulo} ${descricao}`;
 
-          const precos =
-            texto.match(/R\$\s?[\d.]+(?:,\d{2})?/g) || [];
+          const titulo =
+            item.title || "";
 
-          const areas =
-            texto.match(/\d+(?:[.,]\d+)?\s?m²/gi) || [];
+          const descricao =
+            item.snippet || "";
 
-          const precosValidos = precos.filter(p => {
-            const valor = Number(
-              p
-                .replace(/R\$\s?/i, "")
-                .replace(/\./g, "")
-                .replace(",", ".")
-                .trim()
-            );
+          const link =
+            item.link || "";
 
-            return valor >= 50000;
-          });
-
-          const preco =
-            item.price ||
-            precosValidos[0] ||
+          const fonte =
+            item.source ||
+            item.displayed_link ||
             "";
 
-          const area = areas[0] || "";
+          const texto =
+            `${titulo} ${descricao}`;
 
-          const areaResultado = area
-            ? Number(
-                area
-                  .replace(/m²/i, "")
-                  .trim()
-                  .replace(",", ".")
-              )
-            : null;
+          const p =
+            numeroPreco(
+              `${item.price || ""} ${texto}`
+            );
+
+          const a =
+            numeroArea(texto);
+
+          // =================================
+          // TIPO DO IMÓVEL
+          // =================================
 
           let tipoOk = true;
 
           if (tipoBusca === "apartamento") {
+
             tipoOk =
-              /apartamento|apto|flat|studio/i.test(texto) &&
+              /apartamento|apto|flat|studio/i
+                .test(texto) &&
               !/\bcasa\b/i.test(texto);
+
           }
 
-          if (tipoBusca === "casa") {
+          else if (tipoBusca === "casa") {
+
             tipoOk =
-              /\bcasa\b|sobrado/i.test(texto) &&
+              /\bcasa\b|sobrado|condomínio|condominio/i
+                .test(texto) &&
               !/apartamento|apto/i.test(texto);
+
           }
+
+          else if (tipoBusca === "cobertura") {
+
+            tipoOk =
+              /cobertura/i.test(texto);
+
+          }
+
+          else if (tipoBusca === "terreno") {
+
+            tipoOk =
+              /terreno|lote/i.test(texto);
+
+          }
+
+          else if (tipoBusca === "galpao") {
+
+            tipoOk =
+              /galpão|galpao/i.test(texto);
+
+          }
+
+          else if (tipoBusca === "comercial") {
+
+            tipoOk =
+              /loja|comercial|sala/i.test(texto);
+
+          }
+
+          else if (tipoBusca === "sitio") {
+
+            tipoOk =
+              /sítio|sitio|fazenda|chácara|chacara/i
+                .test(texto);
+
+          }
+
+          // =================================
+          // QUARTOS
+          // =================================
 
           let quartosOk = true;
 
-          if (quartosBusca) {
-            const regexQuartos = new RegExp(
-              "\\b" +
-                quartosBusca +
-                "\\s*(?:quartos?|dormitórios?)",
-              "i"
-            );
+          if (
+            quartosBusca &&
+            /apartamento|casa|cobertura/i
+              .test(tipoBusca)
+          ) {
 
-            quartosOk = regexQuartos.test(texto);
+            const qm =
+              texto.match(
+                /(\d+)\s*(?:quartos?|dormitórios?)/i
+              );
+
+            quartosOk =
+              qm
+                ? Math.abs(
+                    Number(qm[1]) -
+                    quartosBusca
+                  ) <= 1
+                : true;
           }
 
-          let areaOk = true;
+          // =================================
+          // ÁREA
+          // =================================
 
-          if (areaBusca && areaResultado) {
-            const diferenca =
-              Math.abs(areaResultado - areaBusca) /
-              areaBusca;
+          let areaOk =
+            Boolean(a.valor);
 
-            areaOk = diferenca <= 0.35;
+          if (
+            areaBusca &&
+            a.valor
+          ) {
+
+            areaOk =
+              Math.abs(
+                a.valor - areaBusca
+              ) / areaBusca <= 0.45;
           }
 
-          const social =
-            /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i.test(
-              item.link || ""
-            );
-
-          const temPreco = Boolean(preco);
-          const temArea = Boolean(areaResultado);
+          // =================================
+          // NÃO ACEITA PÁGINA COLETIVA
+          // =================================
 
           const paginaColetiva =
-            /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i.test(
-              texto
-            ) ||
-            /imóveis\s+(?:para|à)\s+venda/i.test(titulo) ||
-            /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i.test(
-              titulo
+            /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i
+              .test(titulo) ||
+            /imóveis\s+(?:para|à)\s+venda/i
+              .test(titulo);
+
+          const dominioOk =
+            dominiosImobiliarios.test(link);
+
+          const bloqueado =
+            bloqueados.test(
+              `${link} ${fonte} ${texto}`
             );
 
+          // =================================
+          // COMPARÁVEL VÁLIDO
+          // =================================
+
           const comparavelValido =
-            Boolean(item.link) &&
-            temPreco &&
+            Boolean(link) &&
+            dominioOk &&
+            !bloqueado &&
+            !paginaColetiva &&
+            Boolean(p.valor) &&
+            Boolean(a.valor) &&
             tipoOk &&
             quartosOk &&
-            areaOk &&
-            !social &&
-            !paginaColetiva;
-
-          console.log("DIAGNOSTICO AYRO", {
-            titulo,
-            temPreco,
-            temArea,
-            tipoOk,
-            quartosOk,
-            areaOk,
-            social,
-            paginaColetiva,
-            comparavelValido
-          });
+            areaOk;
 
           return {
+
             titulo,
+
             descricao,
-            link: item.link || "",
-            fonte:
-              item.source ||
-              item.displayed_link ||
-              "",
-            preco,
-            area,
-            comparavel_valido: comparavelValido
+
+            link,
+
+            fonte,
+
+            preco:
+              p.texto,
+
+            preco_valor:
+              p.valor,
+
+            area:
+              a.texto,
+
+            area_valor:
+              a.valor,
+
+            comparavel_valido:
+              comparavelValido
           };
+
         })
-        .filter(item => item.link);
 
-      const linksVistos = new Set();
+        .filter(
+          x => x.link
+        );
 
-      const resultadosUnicos = resultados.filter(item => {
-        const linkLimpo = item.link
-          .split("?")[0]
-          .replace(/\/$/, "");
+    // =====================================
+    // REMOVE LINKS REPETIDOS
+    // =====================================
 
-        if (linksVistos.has(linkLimpo)) {
+    const linksVistos =
+      new Set();
+
+    const resultadosUnicos =
+      resultados.filter(item => {
+
+        const limpo =
+          item.link
+            .split("?")[0]
+            .replace(/\/$/, "");
+
+        if (
+          linksVistos.has(limpo)
+        ) {
           return false;
         }
 
-        linksVistos.add(linkLimpo);
+        linksVistos.add(limpo);
+
         return true;
       });
 
-      const chavesComparaveis = new Set();
+    // =====================================
+    // COMPARÁVEIS REAIS
+    // =====================================
 
-      const comparaveis = resultadosUnicos.filter(item => {
-        if (!item.comparavel_valido) {
-          return false;
-        }
+    const chaves =
+      new Set();
 
-        const fonte = String(item.fonte || "")
-          .toLowerCase()
-          .trim();
+    const comparaveis =
+      resultadosUnicos
+        .filter(item => {
 
-        const precoChave = String(item.preco || "")
-          .replace(/\s+/g, "")
-          .toLowerCase();
-
-        const areaChave = String(item.area || "")
-          .replace(/\s+/g, "")
-          .toLowerCase();
-
-        if (precoChave && areaChave) {
-          const chave =
-            `${fonte}|${precoChave}|${areaChave}`;
-
-          if (chavesComparaveis.has(chave)) {
+          if (
+            !item.comparavel_valido
+          ) {
             return false;
           }
 
-          chavesComparaveis.add(chave);
-        }
+          const chave =
+            `${Math.round(
+              item.preco_valor / 1000
+            )}|${Math.round(
+              item.area_valor
+            )}`;
 
-        return true;
-      });
+          if (
+            chaves.has(chave)
+          ) {
+            return false;
+          }
 
-      const referencias = resultadosUnicos.filter(
-        item => !item.comparavel_valido
-      );
+          chaves.add(chave);
 
-      res.json({
-        sucesso: true,
-        total: resultadosUnicos.length,
-        total_comparaveis: comparaveis.length,
-        comparaveis,
-        referencias,
-        resultados: resultadosUnicos
-      });
-    } catch (erro) {
-      console.error(erro);
+          return true;
 
-      res.status(500).json({
-        erro: "Erro interno na pesquisa."
-      });
-    }
+        })
+
+        .slice(0, 8);
+
+    // =====================================
+    // REFERÊNCIAS NÃO UTILIZADAS NO ACM
+    // =====================================
+
+    const referencias =
+      resultadosUnicos
+        .filter(
+          x => !x.comparavel_valido
+        )
+        .slice(0, 12);
+
+    // =====================================
+    // RESPOSTA PARA O APLICATIVO
+    // =====================================
+
+    return res.json({
+
+      sucesso: true,
+
+      // ACM exige no mínimo 3
+      minimo_comparaveis: 3,
+
+      amostra_suficiente:
+        comparaveis.length >= 3,
+
+      total:
+        resultadosUnicos.length,
+
+      total_comparaveis:
+        comparaveis.length,
+
+      comparaveis,
+
+      referencias,
+
+      resultados:
+        resultadosUnicos
+
+    });
+
+  } catch (erro) {
+
+    console.error(erro);
+
+    res.status(500).json({
+      erro:
+        "Erro interno na pesquisa."
+    });
   }
-);
+});
 
 
-// ======================================================
+// =========================================
 // MERCADO PAGO
-// ======================================================
-
-const MP_API = "https://api.mercadopago.com";
-
-const AYRO_BACK_URL =
-  process.env.AYRO_BACK_URL ||
-  "https://ayro-acm.onrender.com";
-
-function mercadoPagoHeaders() {
-  const accessToken =
-    process.env.MERCADOPAGO_ACCESS_TOKEN;
-
-  if (!accessToken) return null;
-
-  return {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json"
-  };
-}
-
-async function lerRespostaJson(resposta) {
-  const texto = await resposta.text();
-
-  if (!texto) return {};
-
-  try {
-    return JSON.parse(texto);
-  } catch {
-    return { message: texto };
-  }
-}
-
-
-// ======================================================
-// SUPABASE
-// ======================================================
-
-function supabaseConfig() {
-  const url = String(
-    process.env.SUPABASE_URL || ""
-  ).replace(/\/$/, "");
-
-  const secretKey = String(
-    process.env.SUPABASE_SECRET_KEY || ""
-  ).trim();
-
-  if (!url || !secretKey) {
-    return null;
-  }
-
-  return {
-    url,
-    secretKey
-  };
-}
-
-
-async function atualizarAssinaturaSupabase(
-  email,
-  status,
-  subscriptionEnd = null
-) {
-  const config = supabaseConfig();
-
-  if (!config) {
-    throw new Error(
-      "Supabase não configurado no servidor."
-    );
-  }
-
-  const emailLimpo = String(email || "")
-    .trim()
-    .toLowerCase();
-
-  if (!emailLimpo) {
-    throw new Error(
-      "E-mail não informado para atualização."
-    );
-  }
-
-  const endpoint =
-    `${config.url}/rest/v1/profiles` +
-    `?email=eq.${encodeURIComponent(emailLimpo)}`;
-
-  const resposta = await fetch(endpoint, {
-    method: "PATCH",
-
-    headers: {
-      apikey: config.secretKey,
-      Authorization: `Bearer ${config.secretKey}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation"
-    },
-
-    body: JSON.stringify({
-      subscription_status: status,
-      subscription_end: subscriptionEnd
-    })
-  });
-
-  const dados = await lerRespostaJson(resposta);
-
-  if (!resposta.ok) {
-    console.error(
-      "Erro Supabase:",
-      dados
-    );
-
-    throw new Error(
-      "Não foi possível atualizar a assinatura no Supabase."
-    );
-  }
-
-  console.log(
-    "SUPABASE ATUALIZADO:",
-    emailLimpo,
-    status
-  );
-
-  return dados;
-}
-
-
-// ======================================================
-// CRIAR PLANO
-// ======================================================
-
-app.post(
-  "/api/mercadopago/criar-plano",
-  async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
-
-      if (!headers) {
-        return res.status(500).json({
-          erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
-        });
-      }
-
-      const plano = {
-        reason: "AYRO ACM Pro",
-
-        external_reference:
-          `AYRO-ACM-PRO-${Date.now()}`,
-
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: "months",
-          transaction_amount: 49.90,
-          currency_id: "BRL"
-        },
-
-        back_url: AYRO_BACK_URL
-      };
-
-      const resposta = await fetch(
-        `${MP_API}/preapproval_plan`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify(plano)
-        }
-      );
-
-      const dados =
-        await lerRespostaJson(resposta);
-
-      if (!resposta.ok) {
-        return res.status(
-          resposta.status
-        ).json({
-          erro:
-            "Não foi possível criar o plano.",
-          detalhes: dados
-        });
-      }
-
-      return res.json({
-        sucesso: true,
-        plano_id: dados.id,
-        status: dados.status,
-        checkout_url: dados.init_point,
-        init_point: dados.init_point,
-        auto_recurring:
-          dados.auto_recurring
-      });
-    } catch (erro) {
-      console.error(erro);
-
-      return res.status(500).json({
-        erro:
-          "Erro interno ao criar o plano."
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// ASSINAR PLANO EXISTENTE
-// ======================================================
+// ASSINATURA AYRO ACM PRO
+// R$ 49,90 POR MÊS
+// =========================================
 
 app.post(
   "/api/mercadopago/criar-assinatura",
   async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
 
-      if (!headers) {
+    try {
+
+      const accessToken =
+        process.env
+          .MERCADOPAGO_ACCESS_TOKEN;
+
+      if (!accessToken) {
+
         return res.status(500).json({
           erro:
             "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
         });
+
       }
 
-      const planoConfigurado =
-        String(
-          process.env.MERCADOPAGO_PLAN_ID || ""
-        ).trim();
+      const { email } =
+        req.body || {};
 
-      if (planoConfigurado) {
-        const consulta = await fetch(
-          `${MP_API}/preapproval_plan/${encodeURIComponent(
-            planoConfigurado
-          )}`,
+      if (!email) {
+
+        return res.status(400).json({
+          erro:
+            "Informe o e-mail do cliente."
+        });
+
+      }
+
+      const baseUrl =
+        "https://ayro-acm.onrender.com";
+
+      const assinatura = {
+
+        reason:
+          "AYRO ACM Pro",
+
+        external_reference:
+          `AYRO-${Date.now()}`,
+
+        payer_email:
+          email,
+
+        auto_recurring: {
+
+          frequency: 1,
+
+          frequency_type:
+            "months",
+
+          transaction_amount:
+            49.90,
+
+          currency_id:
+            "BRL"
+
+        },
+
+        back_url:
+          baseUrl,
+
+        status:
+          "pending"
+      };
+
+      const resposta =
+        await fetch(
+          "https://api.mercadopago.com/preapproval",
           {
-            method: "GET",
-            headers
+
+            method:
+              "POST",
+
+            headers: {
+
+              "Authorization":
+                `Bearer ${accessToken}`,
+
+              "Content-Type":
+                "application/json"
+
+            },
+
+            body:
+              JSON.stringify(
+                assinatura
+              )
+
           }
         );
 
-        const plano =
-          await lerRespostaJson(consulta);
+      const dados =
+        await resposta.json();
 
-        if (!consulta.ok) {
-          return res.status(
-            consulta.status
-          ).json({
+      if (!resposta.ok) {
+
+        console.error(
+          "Erro Mercado Pago:",
+          dados
+        );
+
+        return res
+          .status(resposta.status)
+          .json({
+
             erro:
-              "O plano configurado não pôde ser consultado.",
-            detalhes: plano
+              "Não foi possível criar a assinatura.",
+
+            detalhes:
+              dados
+
           });
-        }
-
-        return res.json({
-          sucesso: true,
-          plano_id: plano.id,
-          status: plano.status,
-          checkout_url: plano.init_point,
-          init_point: plano.init_point
-        });
       }
 
-      return res.status(500).json({
-        erro:
-          "MERCADOPAGO_PLAN_ID não configurado."
+      return res.json({
+
+        sucesso: true,
+
+        assinatura_id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        checkout_url:
+          dados.init_point
+
       });
+
     } catch (erro) {
-      console.error(erro);
 
-      return res.status(500).json({
-        erro:
-          "Erro interno no Mercado Pago."
-      });
-    }
-  }
-);
-
-
-// ======================================================
-// CONSULTAR PLANO
-// ======================================================
-
-app.get(
-  "/api/mercadopago/consultar-plano/:id",
-  async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
-
-      if (!headers) {
-        return res.status(500).json({
-          erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado."
-        });
-      }
-
-      const id =
-        String(req.params.id || "").trim();
-
-      const resposta = await fetch(
-        `${MP_API}/preapproval_plan/${encodeURIComponent(
-          id
-        )}`,
-        {
-          method: "GET",
-          headers
-        }
+      console.error(
+        "Erro ao criar assinatura Mercado Pago:",
+        erro
       );
 
-      const dados =
-        await lerRespostaJson(resposta);
-
-      return res.status(
-        resposta.status
-      ).json(dados);
-    } catch (erro) {
-      console.error(erro);
-
       return res.status(500).json({
         erro:
-          "Erro ao consultar plano."
+          "Erro interno ao criar assinatura."
       });
     }
   }
 );
 
 
-// ======================================================
+// =========================================
+// MERCADO PAGO
 // CONSULTAR ASSINATURA
-// ======================================================
+// =========================================
 
 app.get(
   "/api/mercadopago/consultar-assinatura/:id",
   async (req, res) => {
-    try {
-      const headers =
-        mercadoPagoHeaders();
 
-      if (!headers) {
+    try {
+
+      const accessToken =
+        process.env
+          .MERCADOPAGO_ACCESS_TOKEN;
+
+      if (!accessToken) {
+
         return res.status(500).json({
           erro:
-            "MERCADOPAGO_ACCESS_TOKEN não configurado."
+            "MERCADOPAGO_ACCESS_TOKEN não configurado no servidor."
         });
+
       }
 
-      const id =
-        String(req.params.id || "").trim();
+      const { id } =
+        req.params;
 
-      const resposta = await fetch(
-        `${MP_API}/preapproval/${encodeURIComponent(
-          id
-        )}`,
-        {
-          method: "GET",
-          headers
-        }
-      );
+      if (!id) {
+
+        return res.status(400).json({
+          erro:
+            "ID da assinatura não informado."
+        });
+
+      }
+
+      const resposta =
+        await fetch(
+          `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+          {
+
+            method:
+              "GET",
+
+            headers: {
+
+              "Authorization":
+                `Bearer ${accessToken}`,
+
+              "Content-Type":
+                "application/json"
+
+            }
+
+          }
+        );
 
       const dados =
-        await lerRespostaJson(resposta);
+        await resposta.json();
 
-      return res.status(
-        resposta.status
-      ).json(dados);
+      if (!resposta.ok) {
+
+        console.error(
+          "Erro ao consultar assinatura:",
+          dados
+        );
+
+        return res
+          .status(resposta.status)
+          .json({
+
+            erro:
+              "Não foi possível consultar a assinatura.",
+
+            detalhes:
+              dados
+
+          });
+      }
+
+      return res.json({
+
+        sucesso: true,
+
+        id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        reason:
+          dados.reason,
+
+        payer_email:
+          dados.payer_email,
+
+        external_reference:
+          dados.external_reference,
+
+        init_point:
+          dados.init_point,
+
+        back_url:
+          dados.back_url,
+
+        auto_recurring:
+          dados.auto_recurring,
+
+        date_created:
+          dados.date_created,
+
+        last_modified:
+          dados.last_modified
+
+      });
+
     } catch (erro) {
-      console.error(erro);
+
+      console.error(
+        "Erro ao consultar assinatura Mercado Pago:",
+        erro
+      );
 
       return res.status(500).json({
         erro:
-          "Erro ao consultar assinatura."
+          "Erro interno ao consultar a assinatura."
       });
     }
   }
 );
 
 
-// ======================================================
-// PROCESSAR PAGAMENTO
-// ======================================================
-
-async function processarPagamento(id) {
-  const headers =
-    mercadoPagoHeaders();
-
-  if (!headers || !id) {
-    return;
-  }
-
-  const resposta = await fetch(
-    `${MP_API}/v1/payments/${encodeURIComponent(
-      id
-    )}`,
-    {
-      method: "GET",
-      headers
-    }
-  );
-
-  const pagamento =
-    await lerRespostaJson(resposta);
-
-  if (!resposta.ok) {
-    console.error(
-      "Pagamento não localizado:",
-      pagamento
-    );
-
-    return;
-  }
-
-  console.log(
-    "PAGAMENTO MERCADO PAGO:",
-    pagamento.id,
-    pagamento.status
-  );
-
-  if (pagamento.status !== "approved") {
-    return;
-  }
-
-  const email =
-    pagamento.payer &&
-    pagamento.payer.email;
-
-  if (!email) {
-    console.error(
-      "Pagamento aprovado sem e-mail."
-    );
-
-    return;
-  }
-
-  await atualizarAssinaturaSupabase(
-    email,
-    "active",
-    null
-  );
-}
-
-
-// ======================================================
-// PROCESSAR ASSINATURA
-// ======================================================
-
-async function processarAssinatura(id) {
-  const headers =
-    mercadoPagoHeaders();
-
-  if (!headers || !id) {
-    return;
-  }
-
-  const resposta = await fetch(
-    `${MP_API}/preapproval/${encodeURIComponent(
-      id
-    )}`,
-    {
-      method: "GET",
-      headers
-    }
-  );
-
-  const assinatura =
-    await lerRespostaJson(resposta);
-
-  if (!resposta.ok) {
-    console.error(
-      "Assinatura não localizada:",
-      assinatura
-    );
-
-    return;
-  }
-
-  const planoConfigurado =
-    String(
-      process.env.MERCADOPAGO_PLAN_ID || ""
-    ).trim();
-
-  if (
-    planoConfigurado &&
-    assinatura.preapproval_plan_id &&
-    assinatura.preapproval_plan_id !==
-      planoConfigurado
-  ) {
-    console.log(
-      "Assinatura pertence a outro plano."
-    );
-
-    return;
-  }
-
-  const email =
-    String(
-      assinatura.payer_email || ""
-    )
-      .trim()
-      .toLowerCase();
-
-  const status =
-    String(
-      assinatura.status || ""
-    ).toLowerCase();
-
-  console.log(
-    "ASSINATURA MERCADO PAGO:",
-    id,
-    status,
-    email
-  );
-
-  if (!email) {
-    return;
-  }
-
-  if (
-    status === "authorized" ||
-    status === "active"
-  ) {
-    await atualizarAssinaturaSupabase(
-      email,
-      "active",
-      null
-    );
-
-    return;
-  }
-
-  if (
-    status === "cancelled" ||
-    status === "canceled" ||
-    status === "paused"
-  ) {
-    await atualizarAssinaturaSupabase(
-      email,
-      "inactive",
-      new Date().toISOString()
-    );
-  }
-}
-
-
-// ======================================================
-// WEBHOOK MERCADO PAGO
-// ======================================================
-
-app.post(
-  "/api/mercadopago/webhook",
-  async (req, res) => {
-    // Mercado Pago recebe confirmação imediatamente
-    res.status(200).json({
-      recebido: true
-    });
-
-    try {
-      const body =
-        req.body || {};
-
-      const tipo =
-        String(
-          body.type ||
-          body.topic ||
-          req.query.type ||
-          req.query.topic ||
-          ""
-        ).toLowerCase();
-
-      const id =
-        body.data?.id ||
-        body.id ||
-        req.query["data.id"] ||
-        req.query.id ||
-        "";
-
-      console.log(
-        "WEBHOOK MERCADO PAGO:",
-        tipo,
-        id
-      );
-
-      if (!id) {
-        return;
-      }
-
-      if (
-        tipo === "payment" ||
-        tipo.includes("payment")
-      ) {
-        await processarPagamento(id);
-        return;
-      }
-
-      if (
-        tipo.includes("preapproval") ||
-        tipo.includes("subscription")
-      ) {
-        await processarAssinatura(id);
-      }
-    } catch (erro) {
-      console.error(
-        "ERRO WEBHOOK:",
-        erro
-      );
-    }
-  }
-);
-
-
-// ======================================================
-// TESTE DO WEBHOOK
-// ======================================================
-
-app.get(
-  "/api/mercadopago/webhook",
-  (req, res) => {
-    res.json({
-      status:
-        "Webhook AYRO ACM online",
-
-      mercado_pago:
-        Boolean(
-          process.env
-            .MERCADOPAGO_ACCESS_TOKEN
-        ),
-
-      plano:
-        Boolean(
-          process.env
-            .MERCADOPAGO_PLAN_ID
-        ),
-
-      supabase:
-        Boolean(
-          process.env.SUPABASE_URL &&
-          process.env
-            .SUPABASE_SECRET_KEY
-        )
-    });
-  }
-);
-
-
-// ======================================================
-// SERVIDOR
-// ======================================================
+// =========================================
+// INICIAR SERVIDOR
+// =========================================
 
 const PORT =
   process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(
-    `AYRO ACM API rodando na porta ${PORT}`
-  );
-});
+app.listen(
+  PORT,
+  () => {
+
+    console.log(
+      `AYRO ACM API rodando na porta ${PORT}`
+    );
+
+  }
+);
