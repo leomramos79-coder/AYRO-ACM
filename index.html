@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>AYRO ACM Pro 2.0</title>
+<title>AYRO ACM Pro</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#090909" />
+<meta name="application-name" content="AYRO ACM Pro" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="AYRO ACM Pro" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+
 <style>
 :root {
   --bg:#f4f4f2; --card:#fff; --ink:#111; --muted:#6f6f6f; --line:#e4e4e1;
@@ -647,7 +655,13 @@ async function openSearches(){
    const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0"><b>${ok?'✓ Comparável':'Referência descartada'} • ${esc(x.fonte||'Fonte')}</b><h3 style="margin:7px 0">${esc(x.titulo||'Anúncio')}</h3><div>${esc(x.preco||'Preço não identificado')} ${x.area?'• '+esc(x.area):''} ${x.preco_m2?`• R$ ${NUM.format(x.preco_m2)}/m²`:''}</div><p>${esc(x.descricao||'')}</p>${!ok&&x.motivo_descarte?`<p style="color:#9b1c14"><b>Motivo:</b> ${esc(x.motivo_descarte)}</p>`:''}${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">Abrir anúncio</a>`:''}</div>`;
    if(win){
      win.document.open();
-     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis PRECISAO-V6</h2><p><b>${comparaveis.length}</b> comparável(is) válido(s). Mínimo exigido: <b>${data.minimo_comparaveis||3}</b>.</p>${avaliacao.calculada?`<div style="background:#fff8e5;border:1px solid #e0bd5b;border-radius:12px;padding:15px"><b>Avaliação calculada</b><p>Venda rápida: <b>${BRL.format(avaliacao.valor_venda_rapida)}</b><br>Valor de mercado: <b>${BRL.format(avaliacao.valor_mercado)}</b><br>Máximo sugerido: <b>${BRL.format(avaliacao.valor_maximo_sugerido)}</b></p></div>`:''}${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Resultados descartados pelo filtro</h2>'+referencias.map(x=>card(x,false)).join(''):''}</body>`);
+     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis PRECISAO-V6</h2><p><b>${comparaveis.length}</b> comparável(is) válido(s). Mínimo exigido: <b>${data.minimo_comparaveis||3}</b>.</p>${avaliacao.calculada?`<div style="background:#fff8e5;border:1px solid #e0bd5b;border-radius:12px;padding:15px"><b>Avaliação calculada</b><p>Venda rápida: <b>${BRL.format(avaliacao.valor_venda_rapida)}</b><br>Valor de mercado: <b>${BRL.format(avaliacao.valor_mercado)}</b><br>Máximo sugerido: <b>${BRL.format(avaliacao.valor_maximo_sugerido)}</b></p></div>`:''}${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Resultados descartados pelo filtro</h2>'+referencias.map(x=>card(x,false)).join(''):''}
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.error('AYRO PWA:', err)));
+}
+</script>
+</body>`);
      win.document.close();
    }
    if(!avaliacao.calculada){
