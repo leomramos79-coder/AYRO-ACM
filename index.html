@@ -218,7 +218,6 @@ function initAyroSupabase(){
             </div>
             <div class="actions no-print">
               <button class="btn gold" onclick="openSearches()">🔎 Pesquisar comparáveis</button>
-              <button class="btn light" onclick="loadDemo()">Carregar exemplo</button>
             </div>
           </div>
           <div class="card s4">
@@ -480,12 +479,15 @@ function renderRows(){
   const tb=document.getElementById('tbody');tb.innerHTML='';
   rows.forEach((r,i)=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td><select onchange="setRow(${i},'source',this.value)">${['OLX','ZAP','Viva Real','Chaves na Mão','Outro'].map(x=>`<option ${r.source===x?'selected':''}>${x}</option>`).join('')}</select></td>
+    const fontes=['OLX','ZAP','Viva Real','Chaves na Mão','Imovelweb','Wimoveis','Kenlo','QuintoAndar','Outro'];
+    if(r.source && !fontes.includes(r.source)) fontes.unshift(r.source);
+    const link=String(r.note||'').startsWith('http')?r.note:'';
+    tr.innerHTML=`<td><select onchange="setRow(${i},'source',this.value)">${fontes.map(x=>`<option ${r.source===x?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
     <td><input value="${esc(r.bairro)}" onchange="setRow(${i},'bairro',this.value)"></td>
     <td><input type="number" min="1" value="${r.area}" onchange="setRow(${i},'area',this.value)"></td>
     <td><input type="number" min="1" value="${r.price}" onchange="setRow(${i},'price',this.value)"></td>
     <td><select onchange="setRow(${i},'sim',this.value)">${[5,4,3,2,1].map(x=>`<option value="${x}" ${+r.sim===x?'selected':''}>${x}/5</option>`).join('')}</select></td>
-    <td><input value="${esc(r.note)}" placeholder="Link ou observação" onchange="setRow(${i},'note',this.value)"></td>
+    <td>${link?`<a href="${esc(link)}" target="_blank" rel="noopener" style="font-weight:800">🔗 Abrir anúncio</a><input type="hidden" value="${esc(r.note)}">`:`<input value="${esc(r.note)}" placeholder="Link ou observação" onchange="setRow(${i},'note',this.value)">`}</td>
     <td class="no-print"><button class="btn red" onclick="removeRow(${i})">×</button></td>`;
     tb.appendChild(tr);
   });
@@ -494,7 +496,7 @@ function renderRows(){
 function esc(v){return String(v??'').replace(/"/g,'&quot;')}
 function setRow(i,k,v){rows[i][k]=v;document.getElementById('countBadge').textContent=validRows().length+' válidos'}
 function removeRow(i){rows.splice(i,1);renderRows()}
-function validRows(){return rows.filter(r=>+r.area>0&&+r.price>0)}
+function validRows(){return rows.filter(r=>+r.area>0&&+r.price>0&&r.eligible!==false)}
 function q(a,p){const x=[...a].sort((m,n)=>m-n);if(!x.length)return 0;const pos=(x.length-1)*p,b=Math.floor(pos),r=pos-b;return x[b+1]!==undefined?x[b]+r*(x[b+1]-x[b]):x[b]}
 function weightedMean(a){let n=0,d=0;a.forEach(x=>{n+=x.ppm*x.w;d+=x.w});return d?n/d:0}
 function round5(v){return Math.round(v/5000)*5000}
@@ -574,38 +576,69 @@ function refreshAll(){refreshDashboard();renderHistory();renderClients();renderR
 async function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
  const beds=document.getElementById('beds').value,area=document.getElementById('area').value;
+ if(!bairro||!city){alert('Informe pelo menos bairro e cidade para pesquisar comparáveis.');return}
+ if(!area||Number(area)<=0){alert('Informe a área do imóvel para que a PRECISAO-V4 calcule a avaliação.');return}
  const busca=`${type} à venda ${bairro} ${city} ${state} ${beds ? beds+' quartos' : ''} ${area ? area+' m²' : ''}`.trim();
  const API='https://ayro-acm-api.onrender.com';
  let win=window.open('','_blank');
- if(win) win.document.write('<h2 style="font-family:Arial">AYRO • pesquisando comparáveis...</h2>');
+ if(win) win.document.write('<h2 style="font-family:Arial">AYRO • pesquisando anúncios imobiliários...</h2><p style="font-family:Arial">Buscando comparáveis e calculando a avaliação pela PRECISAO-V4.</p>');
  try{
    const resp=await fetch(`${API}/search?q=${encodeURIComponent(busca)}`);
    const data=await resp.json();
-   if(!resp.ok || data.erro) throw new Error(data.erro||'Falha na API');
+   if(!resp.ok || data.erro) throw new Error(data.detalhe||data.erro||'Falha na API');
    const comparaveis=Array.isArray(data.comparaveis)?data.comparaveis:[];
    const referencias=Array.isArray(data.referencias)?data.referencias:[];
-   const todos=Array.isArray(data.resultados)?data.resultados:[];
-   const escolhidos=comparaveis.length?comparaveis:todos.filter(x=>x.comparavel_valido);
-   const parseMoney=v=>{if(!v)return 0;let x=String(v).replace(/[^0-9.,]/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');return Number(x)||0};
-   const parseArea=v=>Number(String(v||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
-   const novos=escolhidos.map(x=>({source:x.fonte||'Outro',bairro,area:parseArea(x.area),price:parseMoney(x.preco),sim:5,note:x.link||''})).filter(x=>x.area>0&&x.price>0);
-   if(novos.length){rows=novos;renderRows()}
-   const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0"><b>${ok?'✓ Comparável':'Referência'} • ${x.fonte||'Fonte'}</b><h3 style="margin:7px 0">${x.titulo||'Anúncio'}</h3><div>${x.preco||'Preço não identificado'} ${x.area?'• '+x.area:''}</div><p>${x.descricao||''}</p>${x.link?`<a href="${x.link}" target="_blank">Abrir anúncio</a>`:''}</div>`;
+   const avaliacao=data.avaliacao||{};
+
+   rows=comparaveis.map(x=>({
+     source:x.fonte||'Outro', bairro,
+     area:Number(x.area_valor)||0,
+     price:Number(x.preco_valor)||0,
+     sim:Math.max(1,Math.min(5,Math.round((Number(x.score_similaridade)||100)/20))),
+     note:x.link||'', eligible:x.comparavel_valido!==false,
+     preco_m2:Number(x.preco_m2)||0,
+     score_similaridade:Number(x.score_similaridade)||0
+   })).filter(x=>x.area>0&&x.price>0&&x.note);
+   renderRows();
+
+   if(avaliacao.calculada){
+     const quick=Number(avaliacao.valor_venda_rapida)||0;
+     const market=Number(avaliacao.valor_mercado)||0;
+     const upper=Number(avaliacao.valor_maximo_sugerido)||0;
+     const base=Number(avaliacao.preco_m2_mediano)||0;
+     const count=Number(avaliacao.comparaveis_usados)||rows.length;
+     document.getElementById('quick').textContent=BRL.format(quick);
+     document.getElementById('market').textContent=BRL.format(market);
+     document.getElementById('upper').textContent=BRL.format(upper);
+     document.getElementById('statPPM').textContent='R$ '+NUM.format(base);
+     document.getElementById('statCount').textContent=count;
+     let confidence='Baixa'; if(count>=6) confidence='Alta'; else if(count>=4) confidence='Média';
+     document.getElementById('confidence').textContent=confidence;
+     const owner=document.getElementById('owner').value||'proprietário';
+     document.getElementById('report').innerHTML=`<p>Para o imóvel de <strong>${esc(owner)}</strong>, localizado em <strong>${esc(bairro)}, ${esc(city)}</strong>, a PRECISAO-V4 utilizou <strong>${count} imóveis comparáveis</strong>. O preço mediano encontrado foi de <strong>R$ ${NUM.format(base)}/m²</strong>.</p><p>As três referências calculadas pelo servidor são: <strong>${BRL.format(quick)}</strong> para venda rápida, <strong>${BRL.format(market)}</strong> como valor de mercado e <strong>${BRL.format(upper)}</strong> como valor máximo sugerido.</p><p>${esc(avaliacao.metodologia||'Avaliação baseada nos comparáveis válidos encontrados.')}</p><p>Esta ACM representa opinião mercadológica baseada em preços anunciados e características comparáveis. Não substitui laudo técnico formal quando este for legalmente exigido.</p>`;
+     lastResult={base,quick,market,upper,confidence,count,serverVersion:data.versao||'PRECISAO-V4',metodologia:avaliacao.metodologia||''};
+   }else{
+     lastResult=null;
+     ['quick','market','upper','statPPM','confidence'].forEach(id=>document.getElementById(id).textContent='—');
+     document.getElementById('statCount').textContent=rows.length;
+     document.getElementById('report').textContent=avaliacao.motivo||'Não foi possível calcular a avaliação.';
+   }
+
+   const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0"><b>${ok?'✓ Comparável':'Referência descartada'} • ${esc(x.fonte||'Fonte')}</b><h3 style="margin:7px 0">${esc(x.titulo||'Anúncio')}</h3><div>${esc(x.preco||'Preço não identificado')} ${x.area?'• '+esc(x.area):''} ${x.preco_m2?`• R$ ${NUM.format(x.preco_m2)}/m²`:''}</div><p>${esc(x.descricao||'')}</p>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">Abrir anúncio</a>`:''}</div>`;
    if(win){
      win.document.open();
-     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis encontrados</h2><p><b>${comparaveis.length}</b> comparável(is) filtrado(s) • <b>${referencias.length}</b> referência(s).</p>${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Outros resultados encontrados</h2>'+referencias.map(x=>card(x,false)).join(''):''}</body>`);
+     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis PRECISAO-V4</h2><p><b>${comparaveis.length}</b> comparável(is) válido(s). Mínimo exigido: <b>${data.minimo_comparaveis||3}</b>.</p>${avaliacao.calculada?`<div style="background:#fff8e5;border:1px solid #e0bd5b;border-radius:12px;padding:15px"><b>Avaliação calculada</b><p>Venda rápida: <b>${BRL.format(avaliacao.valor_venda_rapida)}</b><br>Valor de mercado: <b>${BRL.format(avaliacao.valor_mercado)}</b><br>Máximo sugerido: <b>${BRL.format(avaliacao.valor_maximo_sugerido)}</b></p></div>`:''}${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Resultados descartados pelo filtro</h2>'+referencias.map(x=>card(x,false)).join(''):''}</body>`);
      win.document.close();
    }
-   if(!comparaveis.length) alert('A API respondeu, mas nenhum resultado passou pelo filtro de comparáveis. Os links encontrados foram abertos como referências.');
-   else if(!novos.length) alert(`${comparaveis.length} comparável(is) encontrado(s). Os links foram abertos, mas preço/área ainda não puderam ser preenchidos automaticamente em todos.`);
+   if(!avaliacao.calculada){
+     alert(avaliacao.motivo||`Foram encontrados apenas ${rows.length} comparáveis válidos. A ACM não será calculada.`);
+   }else{
+     alert(`${rows.length} comparáveis válidos carregados. A PRECISAO-V4 já calculou as 3 opções de valor e os links reais estão disponíveis.`);
+   }
  }catch(e){
    if(win)win.close();
    alert('Não foi possível consultar a API AYRO: '+e.message);
  }
-}
-function loadDemo(){
- document.getElementById('owner').value='Cliente Demonstração';document.getElementById('bairro').value='Alto';document.getElementById('type').value='Apartamento';document.getElementById('area').value=90;document.getElementById('beds').value=3;
- rows=[{source:'OLX',bairro:'Alto',area:92,price:720000,sim:5,note:'Exemplo'},{source:'ZAP',bairro:'Alto',area:88,price:695000,sim:5,note:'Exemplo'},{source:'Viva Real',bairro:'Alto',area:90,price:750000,sim:5,note:'Exemplo'},{source:'Chaves na Mão',bairro:'Alto',area:95,price:760000,sim:4,note:'Exemplo'},{source:'Outro',bairro:'Alto',area:85,price:665000,sim:4,note:'Exemplo'}];renderRows();calculate();
 }
 function exportCurrent(){
  const d={property:getForm(),comparables:rows,result:lastResult};download('ayro-acm-atual.json',JSON.stringify(d,null,2));
