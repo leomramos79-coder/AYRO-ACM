@@ -9,7 +9,12 @@ app.use(express.json());
 const MIN_COMPARAVEIS = 3;
 const MAX_COMPARAVEIS = 10;
 const TOLERANCIA_AREA = 0.30;
-const FETCH_TIMEOUT_MS = 6500;
+const SIMILARIDADE_PREFERENCIAL = 70;
+const FETCH_TIMEOUT_MS = 4000;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_MAX = 100;
+
+const searchCache = new Map();
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
@@ -55,9 +60,7 @@ function numeroBR(v) {
 }
 
 function mediana(a) {
-  const v = a
-    .filter(Number.isFinite)
-    .sort((x, y) => x - y);
+  const v = a.filter(Number.isFinite).sort((x, y) => x - y);
 
   if (!v.length) return null;
 
@@ -99,15 +102,18 @@ function normalizarLink(link = '') {
   }
 }
 
-function dadosDaBusca(q) {
+function dadosDaBusca(q, params = {}) {
   const nq = norm(q);
 
   const tipo =
-    /apartamento|\bapto\b|flat|studio/.test(nq)
-      ? 'apartamento'
-      : /\bcasa\b|sobrado/.test(nq)
-      ? 'casa'
-      : '';
+    norm(params.tipo) ||
+    (
+      /apartamento|\bapto\b|flat|studio/.test(nq)
+        ? 'apartamento'
+        : /\bcasa\b|sobrado/.test(nq)
+          ? 'casa'
+          : ''
+    );
 
   const qm = nq.match(
     /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/i
@@ -117,10 +123,43 @@ function dadosDaBusca(q) {
     /(\d+(?:[.,]\d+)?)\s*m(?:²|2)(?![a-z0-9])/i
   );
 
+  const num = v => {
+    const n = numeroBR(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
   return {
     tipo,
-    quartos: qm ? Number(qm[1]) : null,
-    area: am ? numeroBR(am[1]) : null
+
+    cidade: String(params.cidade || '').trim(),
+
+    bairro: String(params.bairro || '').trim(),
+
+    quartos:
+      num(params.quartos) ??
+      (qm ? Number(qm[1]) : null),
+
+    suites: num(params.suites),
+
+    vagas: num(params.vagas),
+
+    area:
+      num(params.area) ??
+      (am ? numeroBR(am[1]) : null),
+
+    condominio: num(params.condominio),
+
+    conservacao:
+      String(params.conservacao || '').trim(),
+
+    piscina:
+      String(params.piscina || '').toLowerCase() === 'sim',
+
+    sauna:
+      String(params.sauna || '').toLowerCase() === 'sim',
+
+    diferenciais:
+      String(params.diferenciais || '').trim()
   };
 }
 
@@ -191,12 +230,12 @@ function ehLinkIndividual(link = '') {
 function precosNoTexto(texto) {
   const out = [];
 
-  for (
-    const m of
+  const encontrados =
     String(texto).match(
       /R\$\s*[0-9]{2,3}(?:[.\s][0-9]{3})*(?:,[0-9]{2})?|R\$\s*[0-9]{5,9}/gi
-    ) || []
-  ) {
+    ) || [];
+
+  for (const m of encontrados) {
     const n = numeroBR(m);
 
     if (
@@ -247,6 +286,118 @@ function quartosNoTexto(texto) {
   ];
 }
 
+function primeiroNumero(
+  texto,
+  re,
+  min = 0,
+  max = 999999
+) {
+  const m = norm(texto).match(re);
+
+  if (!m) return null;
+
+  const n = numeroBR(m[1]);
+
+  return (
+    Number.isFinite(n) &&
+    n >= min &&
+    n <= max
+  )
+    ? n
+    : null;
+}
+
+function extrairAtributos(texto = '') {
+  const t = norm(texto);
+
+  const suites = primeiroNumero(
+    t,
+    /(\d+)\s*(?:suites?|suite)/,
+    0,
+    20
+  );
+
+  const vagas = primeiroNumero(
+    t,
+    /(\d+)\s*(?:vagas?|garagens?)/,
+    0,
+    30
+  );
+
+  const condo = primeiroNumero(
+    t,
+    /(?:condominio|cond)[^0-9]{0,15}(?:r\$)?\s*([0-9.]+(?:,[0-9]{1,2})?)/,
+    0,
+    100000
+  );
+
+  const piscina = /\bpiscina\b/.test(t);
+  const sauna = /\bsauna\b/.test(t);
+
+  let conservacao = '';
+
+  if (
+    /novo|lancamento|primeira locacao/.test(t)
+  ) {
+    conservacao = 'novo';
+  } else if (
+    /reformad[oa]|renovad[oa]/.test(t)
+  ) {
+    conservacao = 'reformado';
+  } else if (
+    /bom estado|bem conservad[oa]/.test(t)
+  ) {
+    conservacao = 'bom estado';
+  } else if (
+    /para reformar|precisa reform/.test(t)
+  ) {
+    conservacao = 'para reformar';
+  } else if (
+    /usad[oa]/.test(t)
+  ) {
+    conservacao = 'usado';
+  }
+
+  return {
+    suites,
+    vagas,
+    condominio: condo,
+    piscina,
+    sauna,
+    conservacao
+  };
+}
+
+function contemTermo(texto, termo) {
+  const a = norm(texto);
+  const b = norm(termo).trim();
+
+  return !!b && a.includes(b);
+}
+
+function scoreProximidadeNumero(
+  alvo,
+  valor,
+  peso,
+  tol
+) {
+  if (
+    !Number.isFinite(alvo) ||
+    !Number.isFinite(valor)
+  ) {
+    return 0;
+  }
+
+  const d =
+    Math.abs(valor - alvo) /
+    Math.max(Math.abs(alvo), 1);
+
+  return Math.max(
+    0,
+    peso * (1 - d / tol)
+  );
+}
+
 function escolherArea(vals, alvo) {
   if (!vals.length) return null;
 
@@ -290,7 +441,11 @@ function caminhar(obj, fn, depth = 0) {
 
   if (Array.isArray(obj)) {
     obj.forEach(
-      x => caminhar(x, fn, depth + 1)
+      x => caminhar(
+        x,
+        fn,
+        depth + 1
+      )
     );
 
     return;
@@ -300,42 +455,54 @@ function caminhar(obj, fn, depth = 0) {
     fn(obj);
 
     Object.values(obj).forEach(
-      x => caminhar(x, fn, depth + 1)
+      x => caminhar(
+        x,
+        fn,
+        depth + 1
+      )
     );
   }
 }
 
 function extrairDaPagina(html, busca) {
-  const clean = String(html || '')
-    .replace(
-      /<script[\s\S]*?<\/script>/gi,
-      ' '
-    )
-    .replace(
-      /<style[\s\S]*?<\/style>/gi,
-      ' '
-    )
-    .replace(/<[^>]+>/g, ' ')
-    .replace(
-      /&nbsp;|&#160;/gi,
-      ' '
-    )
-    .replace(
-      /&sup2;|&#178;/gi,
-      '²'
-    )
-    .replace(/&quot;/gi, '"')
-    .replace(/&amp;/gi, '&')
-    .replace(/\s+/g, ' ');
+  const clean =
+    String(html || '')
+      .replace(
+        /<script[\s\S]*?<\/script>/gi,
+        ' '
+      )
+      .replace(
+        /<style[\s\S]*?<\/style>/gi,
+        ' '
+      )
+      .replace(
+        /<[^>]+>/g,
+        ' '
+      )
+      .replace(
+        /&nbsp;|&#160;/gi,
+        ' '
+      )
+      .replace(
+        /&sup2;|&#178;/gi,
+        '²'
+      )
+      .replace(
+        /&quot;/gi,
+        '"'
+      )
+      .replace(
+        /&amp;/gi,
+        '&'
+      )
+      .replace(
+        /\s+/g,
+        ' '
+      );
 
-  const precos =
-    precosNoTexto(clean);
-
-  const areas =
-    areasNoTexto(clean);
-
-  const quartos =
-    quartosNoTexto(clean);
+  const precos = precosNoTexto(clean);
+  const areas = areasNoTexto(clean);
+  const quartos = quartosNoTexto(clean);
 
   const structured = {
     precos: [],
@@ -344,66 +511,66 @@ function extrairDaPagina(html, busca) {
   };
 
   for (
-    const root of
-    extrairJsonLd(html)
+    const root of extrairJsonLd(html)
   ) {
-    caminhar(root, o => {
-      for (
-        const [k, v] of
-        Object.entries(o)
-      ) {
-        if (
-          /^(price|lowPrice|highPrice)$/i.test(k)
+    caminhar(
+      root,
+      o => {
+        for (
+          const [k, v] of Object.entries(o)
         ) {
-          const n = numeroBR(v);
-
           if (
-            Number.isFinite(n) &&
-            n >= 50000
+            /^(price|lowPrice|highPrice)$/i.test(k)
           ) {
-            structured.precos.push(n);
+            const n = numeroBR(v);
+
+            if (
+              Number.isFinite(n) &&
+              n >= 50000
+            ) {
+              structured.precos.push(n);
+            }
           }
-        }
-
-        if (
-          /floorSize|area|size/i.test(k)
-        ) {
-          const val =
-            typeof v === 'object'
-              ? (
-                  v.value ||
-                  v.amount ||
-                  ''
-                )
-              : v;
-
-          const n =
-            numeroBR(val);
 
           if (
-            Number.isFinite(n) &&
-            n >= 15 &&
-            n <= 100000
+            /floorSize|area|size/i.test(k)
           ) {
-            structured.areas.push(n);
+            const val =
+              typeof v === 'object'
+                ? (
+                    v.value ||
+                    v.amount ||
+                    ''
+                  )
+                : v;
+
+            const n = numeroBR(val);
+
+            if (
+              Number.isFinite(n) &&
+              n >= 15 &&
+              n <= 100000
+            ) {
+              structured.areas.push(n);
+            }
           }
-        }
-
-        if (
-          /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
-        ) {
-          const n = Number(v);
 
           if (
-            Number.isFinite(n) &&
-            n > 0 &&
-            n < 30
+            /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
           ) {
-            structured.quartos.push(n);
+            const n = Number(v);
+
+            if (
+              Number.isFinite(n) &&
+              n > 0 &&
+              n < 30
+            ) {
+              structured.quartos.push(n);
+            }
           }
         }
       }
-    });
+    );
   }
 
   const metaPrice = [
@@ -411,7 +578,9 @@ function extrairDaPagina(html, busca) {
       /(?:property|name)=["'][^"']*(?:price|preco)[^"']*["'][^>]*content=["']([^"']+)/gi
     )
   ]
-    .map(m => numeroBR(m[1]))
+    .map(
+      m => numeroBR(m[1])
+    )
     .filter(
       n =>
         Number.isFinite(n) &&
@@ -440,6 +609,9 @@ function extrairDaPagina(html, busca) {
     ])
   ];
 
+  const attrs =
+    extrairAtributos(clean);
+
   return {
     preco:
       allPrecos[0] || null,
@@ -453,6 +625,8 @@ function extrairDaPagina(html, busca) {
     quartos:
       allQuartos,
 
+    ...attrs,
+
     texto:
       clean.slice(0, 20000)
   };
@@ -462,7 +636,9 @@ async function enriquecerPagina(
   item,
   busca
 ) {
-  if (!ehLinkIndividual(item.link)) {
+  if (
+    !ehLinkIndividual(item.link)
+  ) {
     return item;
   }
 
@@ -490,7 +666,7 @@ async function enriquecerPagina(
             'accept-language':
               'pt-BR,pt;q=0.9,en;q=0.7',
 
-            'accept':
+            accept:
               'text/html,application/xhtml+xml'
           }
         }
@@ -524,10 +700,8 @@ async function enriquecerPagina(
       ...item,
       _pagina: p
     };
-
   } catch {
     return item;
-
   } finally {
     clearTimeout(timer);
   }
@@ -554,6 +728,12 @@ function avaliarItem(
 
   const pg =
     item._pagina || {};
+
+  const full =
+    `${texto} ${pg.texto || ''}`;
+
+  const attrs =
+    extrairAtributos(full);
 
   const precos = [
     ud.preco,
@@ -582,6 +762,38 @@ function avaliarItem(
     ...quartosNoTexto(texto)
   ].filter(Number.isFinite);
 
+  const suites =
+    Number.isFinite(pg.suites)
+      ? pg.suites
+      : attrs.suites;
+
+  const vagas =
+    Number.isFinite(pg.vagas)
+      ? pg.vagas
+      : attrs.vagas;
+
+  const condominio =
+    Number.isFinite(pg.condominio)
+      ? pg.condominio
+      : attrs.condominio;
+
+  const piscina =
+    Boolean(
+      pg.piscina ||
+      attrs.piscina
+    );
+
+  const sauna =
+    Boolean(
+      pg.sauna ||
+      attrs.sauna
+    );
+
+  const conservacao =
+    pg.conservacao ||
+    attrs.conservacao ||
+    '';
+
   const motivos = [];
 
   if (
@@ -608,50 +820,25 @@ function avaliarItem(
     );
   }
 
-  const textoTipo =
-    norm(
-      `${texto} ${pg.texto || ''}`
-    );
+  const nt =
+    norm(full);
 
   const temApto =
-    /apartamento|\bapto\b|flat|studio/.test(
-      textoTipo
-    );
+    /apartamento|\bapto\b|flat|studio/.test(nt);
 
   const temCasa =
-    /\bcasa\b|sobrado/.test(
-      textoTipo
-    );
+    /\bcasa\b|sobrado/.test(nt);
 
-  if (
-    busca.tipo === 'apartamento' &&
-    temCasa &&
-    !temApto
-  ) {
+  const tipoConfere =
+    busca.tipo === 'apartamento'
+      ? (!temCasa || temApto)
+      : busca.tipo === 'casa'
+        ? (!temApto || temCasa)
+        : true;
+
+  if (!tipoConfere) {
     motivos.push(
       'tipo de imóvel divergente'
-    );
-  }
-
-  if (
-    busca.tipo === 'casa' &&
-    temApto &&
-    !temCasa
-  ) {
-    motivos.push(
-      'tipo de imóvel divergente'
-    );
-  }
-
-  if (
-    busca.quartos &&
-    quartos.length &&
-    !quartos.includes(
-      busca.quartos
-    )
-  ) {
-    motivos.push(
-      'quantidade de quartos divergente'
     );
   }
 
@@ -682,15 +869,53 @@ function avaliarItem(
       ? preco / area
       : null;
 
-  let score = 20;
+  /*
+    HIERARQUIA AYRO V11
 
-  if (
-    busca.quartos &&
-    quartos.includes(
-      busca.quartos
-    )
-  ) {
-    score += 30;
+    Bairro: 25
+    Tipo: 15
+    Área: 20
+    Quartos/suítes: 10
+    Conservação: 8
+    Vagas: 5
+    Condomínio: 4
+    Piscina/sauna: 3
+    Diferenciais: 3
+    Preço/m²: 2
+
+    TOTAL = 95
+    A pontuação é limitada a 100.
+  */
+
+  let score = 0;
+
+  const detalhes = {};
+
+  const bairroOk =
+    busca.bairro
+      ? contemTermo(
+          full,
+          busca.bairro
+        )
+      : null;
+
+  detalhes.bairro =
+    bairroOk;
+
+  if (bairroOk) {
+    score += 25;
+  }
+
+  if (busca.tipo) {
+    if (tipoConfere) {
+      score += 15;
+      detalhes.tipo = true;
+    } else {
+      detalhes.tipo = false;
+    }
+  } else {
+    score += 15;
+    detalhes.tipo = null;
   }
 
   if (
@@ -698,19 +923,181 @@ function avaliarItem(
       diferencaArea
     )
   ) {
-    score += Math.max(
-      0,
-      40 * (
-        1 -
-        diferencaArea /
-        TOLERANCIA_AREA
+    const pts =
+      Math.max(
+        0,
+        20 *
+          (
+            1 -
+            diferencaArea /
+              TOLERANCIA_AREA
+          )
+      );
+
+    score += pts;
+
+    detalhes.area =
+      Math.round(pts);
+  }
+
+  let ptsQS = 0;
+
+  if (
+    busca.quartos &&
+    quartos.includes(
+      busca.quartos
+    )
+  ) {
+    ptsQS += 6;
+  }
+
+  if (
+    Number.isFinite(
+      busca.suites
+    ) &&
+    Number.isFinite(
+      suites
+    ) &&
+    busca.suites === suites
+  ) {
+    ptsQS += 4;
+  }
+
+  score += ptsQS;
+
+  detalhes.quartos_suites =
+    ptsQS;
+
+  if (
+    busca.conservacao &&
+    conservacao &&
+    norm(
+      busca.conservacao
+    ).includes(
+      norm(conservacao)
+    )
+  ) {
+    score += 8;
+
+    detalhes.conservacao =
+      true;
+  } else {
+    detalhes.conservacao =
+      null;
+  }
+
+  if (
+    Number.isFinite(
+      busca.vagas
+    ) &&
+    Number.isFinite(
+      vagas
+    ) &&
+    busca.vagas === vagas
+  ) {
+    score += 5;
+
+    detalhes.vagas =
+      true;
+  } else {
+    detalhes.vagas =
+      null;
+  }
+
+  if (
+    Number.isFinite(
+      busca.condominio
+    ) &&
+    busca.condominio > 0 &&
+    Number.isFinite(
+      condominio
+    )
+  ) {
+    const pts =
+      scoreProximidadeNumero(
+        busca.condominio,
+        condominio,
+        4,
+        0.5
+      );
+
+    score += pts;
+
+    detalhes.condominio =
+      Math.round(pts);
+  }
+
+  let lazer = 0;
+
+  if (
+    busca.piscina === piscina
+  ) {
+    lazer += 1.5;
+  }
+
+  if (
+    busca.sauna === sauna
+  ) {
+    lazer += 1.5;
+  }
+
+  score += lazer;
+
+  detalhes.piscina_sauna =
+    lazer;
+
+  if (
+    busca.diferenciais
+  ) {
+    const termos =
+      norm(
+        busca.diferenciais
       )
-    );
+        .split(/[,;]+/)
+        .map(
+          x => x.trim()
+        )
+        .filter(
+          x => x.length > 2
+        );
+
+    if (termos.length) {
+      const acertos =
+        termos.filter(
+          t => nt.includes(t)
+        ).length;
+
+      const pts =
+        3 *
+        (
+          acertos /
+          termos.length
+        );
+
+      score += pts;
+
+      detalhes.diferenciais =
+        Math.round(
+          pts * 10
+        ) / 10;
+    }
   }
 
   if (precoM2) {
-    score += 10;
+    score += 2;
+
+    detalhes.preco_m2 =
+      2;
   }
+
+  score =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        score
+      )
+    );
 
   return {
     titulo,
@@ -724,12 +1111,21 @@ function avaliarItem(
 
     preco:
       Number.isFinite(preco)
-        ? `R$ ${Math.round(preco).toLocaleString('pt-BR')}`
+        ? `R$ ${Math.round(
+            preco
+          ).toLocaleString(
+            'pt-BR'
+          )}`
         : '',
 
     area:
       Number.isFinite(area)
-        ? `${String(area).replace('.', ',')} m²`
+        ? `${String(
+            area
+          ).replace(
+            '.',
+            ','
+          )} m²`
         : '',
 
     preco_valor:
@@ -740,6 +1136,27 @@ function avaliarItem(
 
     preco_m2:
       precoM2,
+
+    quartos_identificados:
+      quartos[0] ?? null,
+
+    suites_identificadas:
+      suites,
+
+    vagas_identificadas:
+      vagas,
+
+    condominio_identificado:
+      condominio,
+
+    piscina_identificada:
+      piscina,
+
+    sauna_identificada:
+      sauna,
+
+    conservacao_identificada:
+      conservacao,
 
     score_similaridade:
       Math.round(score),
@@ -757,7 +1174,9 @@ function avaliarItem(
       dados_pagina:
         Boolean(item._pagina),
 
-      diferencaArea
+      diferencaArea,
+
+      detalhes
     }
   };
 }
@@ -789,29 +1208,26 @@ async function buscarSerp(
     if (!r.ok) {
       return {
         resultados: [],
-
         erro:
           d.error ||
           `HTTP ${r.status}`,
-
         fatal:
-          [401, 403, 429]
-            .includes(r.status)
+          [401, 403, 429].includes(
+            r.status
+          )
       };
     }
 
     if (d.error) {
       return {
         resultados: [],
-
         erro:
           String(d.error),
 
         fatal:
-          /invalid api key|unauthorized|credits|account|rate limit/i
-            .test(
-              String(d.error)
-            )
+          /invalid api key|unauthorized|credits|account|rate limit/i.test(
+            String(d.error)
+          )
       };
     }
 
@@ -826,15 +1242,12 @@ async function buscarSerp(
       erro: '',
       fatal: false
     };
-
   } catch (e) {
     return {
       resultados: [],
-
       erro:
         e.message ||
         String(e),
-
       fatal: false
     };
   }
@@ -868,16 +1281,14 @@ function semOutliers(comps) {
   const q1 =
     v[
       Math.floor(
-        (v.length - 1) *
-        .25
+        (v.length - 1) * 0.25
       )
     ];
 
   const q3 =
     v[
       Math.floor(
-        (v.length - 1) *
-        .75
+        (v.length - 1) * 0.75
       )
     ];
 
@@ -912,7 +1323,7 @@ function calcularAvaliacao(
   if (
     !area ||
     comps.length <
-    MIN_COMPARAVEIS
+      MIN_COMPARAVEIS
   ) {
     return {
       calculada: false,
@@ -927,50 +1338,129 @@ function calcularAvaliacao(
   const base =
     semOutliers(comps);
 
-  const m2s =
-    base
-      .map(
-        x => x.preco_m2
-      )
-      .filter(
-        Number.isFinite
-      );
+  const valid =
+    base.filter(
+      x =>
+        Number.isFinite(
+          x.preco_m2
+        )
+    );
 
-  const med =
-    mediana(m2s);
-
-  const avg =
-    media(m2s);
-
-  if (!med) {
+  if (
+    valid.length <
+    MIN_COMPARAVEIS
+  ) {
     return {
       calculada: false,
 
       motivo:
-        'Não foi possível calcular o valor por m².'
+        'Não há comparáveis suficientes com preço por m² válido.'
     };
   }
 
+  const fortes =
+    valid.filter(
+      x =>
+        x.score_similaridade >=
+        SIMILARIDADE_PREFERENCIAL
+    );
+
+  const usados =
+    fortes.length >=
+    MIN_COMPARAVEIS
+      ? fortes
+      : valid;
+
+  const somaPeso =
+    usados.reduce(
+      (s, x) =>
+        s +
+        Math.max(
+          1,
+          x.score_similaridade
+        ),
+      0
+    );
+
+  const ponderado =
+    usados.reduce(
+      (s, x) =>
+        s +
+        x.preco_m2 *
+          Math.max(
+            1,
+            x.score_similaridade
+          ),
+      0
+    ) /
+    somaPeso;
+
+  const med =
+    mediana(
+      usados.map(
+        x => x.preco_m2
+      )
+    );
+
+  const avg =
+    media(
+      usados.map(
+        x => x.preco_m2
+      )
+    );
+
+  /*
+    60% preço/m² ponderado pela similaridade
+    40% mediana da amostra
+
+    Isso reduz o efeito de anúncios extremos.
+  */
+
+  const referencia =
+    ponderado * 0.60 +
+    med * 0.40;
+
   const mercado =
-    med * area;
+    referencia * area;
 
   const rapida =
-    mercado * .95;
+    mercado * 0.95;
 
   const maximo =
     mercado * 1.05;
+
+  const simMedia =
+    media(
+      usados.map(
+        x =>
+          x.score_similaridade
+      )
+    );
 
   return {
     calculada: true,
 
     metodologia:
-      'Mediana do preço por m² de anúncios individuais validados. Quando possível, preço, área e quartos são confirmados na própria página do anúncio.',
+      'Preço por m² ponderado pela similaridade dos comparáveis, combinado com a mediana para reduzir distorções. Prioridade: bairro, tipo, área, quartos/suítes, conservação, vagas, condomínio, piscina/sauna, diferenciais e R$/m².',
 
     comparaveis_usados:
-      base.length,
+      usados.length,
+
+    comparaveis_alta_similaridade:
+      fortes.length,
+
+    similaridade_media:
+      Math.round(
+        simMedia || 0
+      ),
 
     area_avaliada_m2:
       area,
+
+    preco_m2_referencia:
+      Math.round(
+        referencia
+      ),
 
     preco_m2_mediano:
       Math.round(med),
@@ -1000,6 +1490,62 @@ function calcularAvaliacao(
   };
 }
 
+function cacheGet(key) {
+  const x =
+    searchCache.get(key);
+
+  if (!x) {
+    return null;
+  }
+
+  if (
+    Date.now() - x.at >
+    CACHE_TTL_MS
+  ) {
+    searchCache.delete(key);
+    return null;
+  }
+
+  return x.data;
+}
+
+function cacheSet(
+  key,
+  data
+) {
+  if (
+    searchCache.size >=
+    CACHE_MAX
+  ) {
+    const first =
+      searchCache
+        .keys()
+        .next()
+        .value;
+
+    if (first) {
+      searchCache.delete(first);
+    }
+  }
+
+  searchCache.set(
+    key,
+    {
+      at: Date.now(),
+      data
+    }
+  );
+}
+
+app.get(
+  '/health',
+  (req, res) =>
+    res.json({
+      ok: true,
+      versao: 'PRECISAO-V11'
+    })
+);
+
 app.get(
   '/',
   (req, res) =>
@@ -1008,7 +1554,7 @@ app.get(
         'AYRO ACM API online',
 
       versao:
-        'PRECISAO-V9',
+        'PRECISAO-V11',
 
       minimo_comparaveis:
         MIN_COMPARAVEIS
@@ -1051,12 +1597,33 @@ app.get(
       }
 
       const busca =
-        dadosDaBusca(q);
+        dadosDaBusca(
+          q,
+          req.query
+        );
+
+      const cacheKey =
+        norm(
+          q +
+          '|' +
+          JSON.stringify(busca)
+        );
+
+      const cached =
+        cacheGet(cacheKey);
+
+      if (cached) {
+        return res.json({
+          ...cached,
+          cache: true
+        });
+      }
 
       const vistos =
         new Set();
 
-      const candidatos = [];
+      const candidatos =
+        [];
 
       const semArea =
         q
@@ -1070,93 +1637,117 @@ app.get(
           )
           .trim();
 
-      const consultas = [
-        `site:imovelweb.com.br/propriedades ${semArea} venda`,
-
+      const principais = [
         `site:chavesnamao.com.br/imovel ${semArea} venda`,
+
+        `site:imovelweb.com.br/propriedades ${semArea} venda`,
 
         `site:vivareal.com.br/imovel ${semArea} venda`,
 
-        `site:zapimoveis.com.br/imovel ${semArea} venda`,
-
-        `${semArea} "Teresópolis" imóvel venda preço`,
-
-        `${semArea} imóvel venda R$`
+        `site:zapimoveis.com.br/imovel ${semArea} venda`
       ];
 
-      const erros_busca = [];
+      const fallback = [
+        `${semArea} imóvel venda preço R$`,
 
-      for (
-        const consulta of
-        [...new Set(consultas)]
-      ) {
-        const t =
-          await buscarSerp(
-            apiKey,
-            consulta,
-            20
+        `${semArea} imóvel venda R$ m²`
+      ];
+
+      const erros_busca =
+        [];
+
+      const adicionar =
+        (lista = []) => {
+          for (
+            const raw of lista
+          ) {
+            if (
+              !raw?.link
+            ) {
+              continue;
+            }
+
+            const k =
+              normalizarLink(
+                raw.link
+              );
+
+            if (
+              vistos.has(k)
+            ) {
+              continue;
+            }
+
+            vistos.add(k);
+
+            candidatos.push(
+              raw
+            );
+          }
+        };
+
+      const rodar =
+        async consultas => {
+          const lotes =
+            await Promise.all(
+              consultas.map(
+                c =>
+                  buscarSerp(
+                    apiKey,
+                    c,
+                    20
+                  )
+              )
+            );
+
+          lotes.forEach(
+            (t, i) => {
+              if (t.erro) {
+                erros_busca.push({
+                  consulta:
+                    consultas[i],
+
+                  erro:
+                    t.erro
+                });
+              }
+
+              adicionar(
+                t.resultados
+              );
+            }
           );
 
-        if (t.erro) {
-          erros_busca.push({
-            consulta,
-            erro:
-              t.erro
-          });
-        }
-
-        if (
-          t.fatal &&
-          candidatos.length === 0
-        ) {
-          return res
-            .status(502)
-            .json({
-              erro:
-                'Falha na SerpApi.',
-
-              detalhe:
-                t.erro,
-
-              versao:
-                'PRECISAO-V9'
-            });
-        }
-
-        for (
-          const raw of
-          t.resultados
-        ) {
-          if (!raw.link) {
-            continue;
-          }
-
-          const k =
-            normalizarLink(
-              raw.link
+          const fatal =
+            lotes.find(
+              t => t.fatal
             );
 
           if (
-            vistos.has(k)
+            fatal &&
+            candidatos.length === 0
           ) {
-            continue;
+            throw new Error(
+              `SERP_FATAL:${fatal.erro}`
+            );
           }
+        };
 
-          vistos.add(k);
+      await rodar(
+        principais
+      );
 
-          candidatos.push(raw);
-        }
-
-        if (
-          candidatos.filter(
-            x =>
-              ehLinkIndividual(
-                x.link
-              )
-          ).length >= 12
-        ) {
-          break;
-        }
+      if (
+        candidatos.filter(
+          x =>
+            ehLinkIndividual(
+              x.link
+            )
+        ).length < 8
+      ) {
+        await rodar(
+          fallback
+        );
       }
 
       const individuais =
@@ -1169,20 +1760,22 @@ app.get(
           )
           .slice(
             0,
-            16
+            12
           );
 
-      const enriquecidos = [];
+      const enriquecidos =
+        [];
 
       for (
         let i = 0;
-        i < individuais.length;
-        i += 4
+        i <
+        individuais.length;
+        i += 6
       ) {
         const lote =
           individuais.slice(
             i,
-            i + 4
+            i + 6
           );
 
         enriquecidos.push(
@@ -1209,8 +1802,7 @@ app.get(
             .filter(
               x =>
                 x.comparavel_valido
-            )
-            .length >= 8
+            ).length >= 6
         ) {
           break;
         }
@@ -1279,11 +1871,11 @@ app.get(
           busca.area
         );
 
-      res.json({
+      const payload = {
         sucesso: true,
 
         versao:
-          'PRECISAO-V9',
+          'PRECISAO-V11',
 
         consulta:
           q,
@@ -1312,11 +1904,19 @@ app.get(
           ...comparaveis,
           ...referencias
         ]
-      });
+      };
 
+      cacheSet(
+        cacheKey,
+        payload
+      );
+
+      res.json(
+        payload
+      );
     } catch (e) {
       console.error(
-        'ERRO AYRO V9:',
+        'ERRO AYRO V11:',
         e
       );
 
@@ -1331,7 +1931,154 @@ app.get(
             String(e),
 
           versao:
-            'PRECISAO-V9'
+            'PRECISAO-V11'
+        });
+    }
+  }
+);
+
+
+/* ==========================================
+   MERCADO PAGO
+   ASSINATURA AYRO ACM PRO
+   R$ 49,90 / MÊS
+========================================== */
+
+app.post(
+  '/api/mercadopago/criar-assinatura',
+
+  async (req, res) => {
+    try {
+      const accessToken =
+        process.env
+          .MERCADOPAGO_ACCESS_TOKEN;
+
+      if (!accessToken) {
+        return res
+          .status(500)
+          .json({
+            erro:
+              'MERCADOPAGO_ACCESS_TOKEN não configurado no servidor.'
+          });
+      }
+
+      const {
+        email
+      } = req.body || {};
+
+      if (!email) {
+        return res
+          .status(400)
+          .json({
+            erro:
+              'Informe o e-mail do cliente.'
+          });
+      }
+
+      const baseUrl =
+        'https://ayro-acm.onrender.com';
+
+      const assinatura = {
+        reason:
+          'AYRO ACM Pro',
+
+        external_reference:
+          `AYRO-${Date.now()}`,
+
+        payer_email:
+          email,
+
+        auto_recurring: {
+          frequency: 1,
+
+          frequency_type:
+            'months',
+
+          transaction_amount:
+            49.90,
+
+          currency_id:
+            'BRL'
+        },
+
+        back_url:
+          baseUrl,
+
+        status:
+          'pending'
+      };
+
+      const resposta =
+        await fetch(
+          'https://api.mercadopago.com/preapproval',
+
+          {
+            method:
+              'POST',
+
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+
+              'Content-Type':
+                'application/json'
+            },
+
+            body:
+              JSON.stringify(
+                assinatura
+              )
+          }
+        );
+
+      const dados =
+        await resposta.json();
+
+      if (
+        !resposta.ok
+      ) {
+        console.error(
+          'Erro Mercado Pago:',
+          dados
+        );
+
+        return res
+          .status(
+            resposta.status
+          )
+          .json({
+            erro:
+              'Não foi possível criar a assinatura.',
+
+            detalhes:
+              dados
+          });
+      }
+
+      return res.json({
+        sucesso:
+          true,
+
+        assinatura_id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        checkout_url:
+          dados.init_point
+      });
+    } catch (erro) {
+      console.error(
+        'Erro ao criar assinatura Mercado Pago:',
+        erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Erro interno ao criar assinatura.'
         });
     }
   }
@@ -1348,7 +2095,7 @@ if (
     PORT,
     () =>
       console.log(
-        `AYRO ACM API PRECISAO-V9 rodando na porta ${PORT}`
+        `AYRO ACM API PRECISAO-V11 rodando na porta ${PORT}`
       )
   );
 }
