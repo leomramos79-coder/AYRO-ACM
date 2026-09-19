@@ -1,76 +1,79 @@
-const express = require('express');
-const cors = require('cors');
-const app = express();
+const express=require('express');
+const cors=require('cors');
+const app=express();
 
 app.use(cors());
 app.use(express.json());
 
-const MIN_COMPARAVEIS = 3;
-const MAX_COMPARAVEIS = 10;
-const TOLERANCIA_AREA = 0.45;
+const MIN_COMPARAVEIS=3;
+const MAX_COMPARAVEIS=10;
+const TOLERANCIA_AREA=0.35;
 
-const norm = s =>
-  String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase();
+const norm=s=>String(s||'')
+.normalize('NFD')
+.replace(/[\u0300-\u036f]/g,'')
+.toLowerCase();
 
-function numeroBR(valor){
-  if(valor === null || valor === undefined || valor === '') return null;
+function numeroBR(v){
+  if(v==null||v==='')return null;
 
-  let s = String(valor)
+  let s=String(v)
     .trim()
     .replace(/\s/g,'')
     .replace(/^R\$/i,'')
     .replace(/[^0-9.,]/g,'');
 
-  if(!s) return null;
+  if(!s)return null;
 
-  if(s.includes(',') && s.includes('.')){
-    s = s.replace(/\./g,'').replace(',','.');
-  } else if(s.includes(',')){
-    s = s.replace(',','.');
-  } else if(/^\d{1,3}(\.\d{3})+$/.test(s)){
-    s = s.replace(/\./g,'');
-  }
+  if(s.includes(',')&&s.includes('.'))
+    s=s.replace(/\./g,'').replace(',','.');
 
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+  else if(s.includes(','))
+    s=s.replace(',','.');
+
+  else if(/^\d{1,3}(\.\d{3})+$/.test(s))
+    s=s.replace(/\./g,'');
+
+  const n=Number(s);
+
+  return Number.isFinite(n)?n:null;
 }
 
 function moeda(v){
   return Number.isFinite(v)
-    ? v.toLocaleString('pt-BR',{
+    ?v.toLocaleString('pt-BR',{
         style:'currency',
         currency:'BRL',
         maximumFractionDigits:0
       })
-    : null;
+    :null;
 }
 
 function mediana(a){
-  const v = a.filter(Number.isFinite).sort((x,y)=>x-y);
+  const v=a
+    .filter(Number.isFinite)
+    .sort((x,y)=>x-y);
 
-  if(!v.length) return null;
+  if(!v.length)return null;
 
-  const m = Math.floor(v.length / 2);
+  const m=Math.floor(v.length/2);
 
-  return v.length % 2
-    ? v[m]
-    : (v[m-1] + v[m]) / 2;
+  return v.length%2
+    ?v[m]
+    :(v[m-1]+v[m])/2;
 }
 
 function media(a){
-  const v = a.filter(Number.isFinite);
+  const v=a.filter(Number.isFinite);
 
   return v.length
-    ? v.reduce((x,y)=>x+y,0) / v.length
-    : null;
+    ?v.reduce((x,y)=>x+y,0)/v.length
+    :null;
 }
 
 function normalizarLink(link=''){
   try{
-    const u = new URL(link);
+    const u=new URL(link);
 
     [
       'utm_source',
@@ -79,10 +82,12 @@ function normalizarLink(link=''){
       'utm_term',
       'utm_content',
       'gclid',
-      'fbclid'
-    ].forEach(k => u.searchParams.delete(k));
+      'fbclid',
+      'relatedAds'
+    ].forEach(k=>u.searchParams.delete(k));
 
-    return (u.origin + u.pathname).replace(/\/$/,'');
+    return (u.origin+u.pathname).replace(/\/$/,'');
+
   }catch{
     return String(link)
       .split('?')[0]
@@ -92,119 +97,153 @@ function normalizarLink(link=''){
 
 function dadosDaBusca(q){
 
-  const nq = norm(q);
+  const nq=norm(q);
 
-  const tipo =
+  const tipo=
     /apartamento|\bapto\b|flat|studio/.test(nq)
-      ? 'apartamento'
-      : /\bcasa\b|sobrado/.test(nq)
-        ? 'casa'
-        : '';
+      ?'apartamento'
+      :/\bcasa\b|sobrado/.test(nq)
+        ?'casa'
+        :'';
 
-  const qm = nq.match(
+  const qm=nq.match(
     /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/i
   );
 
-  const am = nq.match(
+  const am=nq.match(
     /(\d+(?:[.,]\d+)?)\s*m(?:²|2)(?![a-z0-9])/i
   );
 
-  return {
+  return{
     tipo,
-    quartos: qm ? Number(qm[1]) : null,
-    area: am ? numeroBR(am[1]) : null
+    quartos:qm?Number(qm[1]):null,
+    area:am?numeroBR(am[1]):null
   };
 }
 
-function textoCompleto(item){
+function dadosDaUrl(link=''){
 
-  let extra = '';
+  let s='';
 
   try{
-    extra = JSON.stringify({
-      rich_snippet: item.rich_snippet || {},
-      detected_extensions: item.detected_extensions || {},
-      extensions: item.extensions || []
-    });
-  }catch{}
+    s=decodeURIComponent(
+      String(link||'')
+    ).toLowerCase();
 
-  return `${item.title || ''} ${item.snippet || ''} ${extra}`;
+  }catch{
+    s=String(link||'').toLowerCase();
+  }
+
+  const q=s.match(
+    /(?:-|\/)(\d+)-quartos?(?:-|\/)/i
+  );
+
+  const a=s.match(
+    /(?:-|\/)(\d+(?:[.,]\d+)?)(?:m2|m²)(?:-|\/)/i
+  );
+
+  const p=s.match(
+    /(?:-|\/)(?:rs|r\$)(\d{5,9})(?:\/|\?|$)/i
+  );
+
+  return{
+    quartos:q?Number(q[1]):null,
+    area:a?numeroBR(a[1]):null,
+    preco:p?numeroBR(p[1]):null
+  };
 }
 
-function extrairPreco(texto,item){
+function ehLinkIndividual(link=''){
 
-  const candidatos = [];
+  const l=String(link||'').toLowerCase();
+
+  if(!l)return false;
+
+  if(
+    /chavesnamao\.com\.br\/imovel\//i.test(l)
+    &&
+    /\/id-\d+/i.test(l)
+  ){
+    return true;
+  }
+
+  if(
+    /imovelweb\.com\.br\/propriedades\//i.test(l)
+  ){
+    return true;
+  }
+
+  if(
+    /(?:zapimoveis|vivareal)\.com\.br\/imovel\//i.test(l)
+  ){
+    return true;
+  }
+
+  if(
+    /\/(?:imovel|imoveis)\//i.test(l)
+    &&
+    !/\/(?:busca|search)\/?(?:\?|$)/i.test(l)
+  ){
+    return true;
+  }
+
+  return false;
+}
+
+function extrairPreco(texto,item,urlData){
+
+  const c=[];
+
+  if(Number.isFinite(urlData?.preco))
+    c.push(urlData.preco);
 
   for(const k of ['price','preco']){
-    if(item?.[k] != null){
-      candidatos.push(String(item[k]));
-    }
+    if(item?.[k]!=null)
+      c.push(item[k]);
   }
 
   for(
     const m of
     String(texto).match(
       /R\$\s*[0-9]{2,3}(?:[.\s][0-9]{3})*(?:,[0-9]{2})?|R\$\s*[0-9]{5,9}/gi
-    ) || []
+    )||[]
   ){
-    candidatos.push(m);
+    c.push(m);
   }
 
-  const walk = (o,d=0) => {
+  for(const x of c){
 
-    if(!o || d > 4) return;
-
-    if(Array.isArray(o)){
-      return o.forEach(v => walk(v,d+1));
-    }
-
-    if(typeof o === 'object'){
-
-      for(const [k,v] of Object.entries(o)){
-
-        if(
-          /price|preco/i.test(k) &&
-          (
-            typeof v === 'string' ||
-            typeof v === 'number'
-          )
-        ){
-          candidatos.push(String(v));
-        } else {
-          walk(v,d+1);
-        }
-      }
-    }
-  };
-
-  walk(item?.rich_snippet);
-  walk(item?.detected_extensions);
-
-  for(const c of candidatos){
-
-    const n = numeroBR(c);
+    const n=
+      typeof x==='number'
+        ?x
+        :numeroBR(x);
 
     if(
-      Number.isFinite(n) &&
-      n >= 50000 &&
-      n <= 100000000
+      Number.isFinite(n)
+      &&
+      n>=50000
+      &&
+      n<=100000000
     ){
-      return {
+      return{
         texto:`R$ ${Math.round(n).toLocaleString('pt-BR')}`,
         valor:n
       };
     }
   }
 
-  return {
+  return{
     texto:'',
     valor:null
   };
 }
 
-function extrairAreas(texto){
+function extrairArea(texto,alvo,urlData){
 
-  const vals = [];
+  const vals=[];
+
+  if(Number.isFinite(urlData?.area))
+    vals.push(urlData.area);
 
   for(
     const m of String(texto).matchAll(
@@ -212,239 +251,231 @@ function extrairAreas(texto){
     )
   ){
 
-    const n = numeroBR(m[1]);
+    const n=numeroBR(m[1]);
 
     if(
-      Number.isFinite(n) &&
-      n >= 15 &&
-      n <= 100000
+      Number.isFinite(n)
+      &&
+      n>=15
+      &&
+      n<=100000
     ){
       vals.push(n);
     }
   }
 
-  return [...new Set(vals)];
-}
+  const u=[...new Set(vals)];
 
-function extrairArea(texto,alvo){
-
-  const vals = extrairAreas(texto);
-
-  if(!vals.length){
-    return {
+  if(!u.length){
+    return{
       texto:'',
       valor:null
     };
   }
 
-  const n = Number.isFinite(alvo)
-    ? vals.sort(
-        (a,b)=>
-          Math.abs(a-alvo) -
-          Math.abs(b-alvo)
-      )[0]
-    : vals[0];
+  const n=
+    Number.isFinite(alvo)
+      ?u.sort(
+          (a,b)=>
+            Math.abs(a-alvo)
+            -
+            Math.abs(b-alvo)
+        )[0]
+      :u[0];
 
-  return {
+  return{
     texto:`${String(n).replace('.',',')} m²`,
     valor:n
   };
 }
 
-function motivoPaginaInutil(titulo,texto,link){
-
-  const t = norm(titulo);
-  const all = norm(texto);
-  const l = String(link || '').toLowerCase();
-
-  if(
-    /instagram\.com|facebook\.com|youtube\.com|tiktok\.com|pinterest\./i.test(l)
-  ){
-    return 'rede social';
-  }
-
-  if(
-    /\/search(?:\/|\?|$)|[?&](?:q|search)=/i.test(l) &&
-    !/R\$/.test(texto)
-  ){
-    return 'página de busca sem dados do imóvel';
-  }
-
-  if(
-    /^imoveis?\s+(?:para|a)\s+venda/.test(t) &&
-    !/R\$/.test(texto)
-  ){
-    return 'página genérica sem preço';
-  }
-
-  if(
-    /\b\d+\s+(?:imoveis|apartamentos|casas|anuncios)\b/.test(all) &&
-    !/R\$/.test(texto)
-  ){
-    return 'listagem sem dados suficientes';
-  }
-
-  return '';
-}
-
 function avaliarItem(item,busca){
 
-  const titulo = item.title || '';
-  const descricao = item.snippet || '';
-  const link = item.link || '';
+  const titulo=item.title||'';
+  const descricao=item.snippet||'';
+  const link=item.link||'';
 
-  const texto = textoCompleto(item);
-  const nt = norm(texto);
+  const texto=
+    `${titulo} ${descricao}`;
 
-  const p = extrairPreco(texto,item);
-  const a = extrairArea(texto,busca.area);
+  const nt=norm(texto);
 
-  const temApto =
-    /apartamento|\bapto\b|flat|studio/.test(nt);
+  const ud=dadosDaUrl(link);
 
-  const temCasa =
-    /\bcasa\b|sobrado/.test(nt);
-
-  let tipoStatus = 'ok';
-
-  if(busca.tipo === 'apartamento'){
-    tipoStatus =
-      temCasa && !temApto
-        ? 'divergente'
-        : temApto
-          ? 'ok'
-          : 'desconhecido';
-  }
-
-  if(busca.tipo === 'casa'){
-    tipoStatus =
-      temApto && !temCasa
-        ? 'divergente'
-        : temCasa
-          ? 'ok'
-          : 'desconhecido';
-  }
-
-  let quartosStatus = 'ok';
-
-  if(busca.quartos){
-
-    const nums = [
-      ...nt.matchAll(
-        /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/g
-      )
-    ].map(m => Number(m[1]));
-
-    quartosStatus =
-      !nums.length
-        ? 'desconhecido'
-        : nums.includes(busca.quartos)
-          ? 'ok'
-          : 'divergente';
-  }
-
-  let diferencaArea = null;
-  let areaOk = Number.isFinite(a.valor);
-
-  if(busca.area && a.valor){
-
-    diferencaArea =
-      Math.abs(a.valor - busca.area) /
-      busca.area;
-
-    areaOk =
-      diferencaArea <= TOLERANCIA_AREA;
-  }
-
-  const paginaInutil =
-    motivoPaginaInutil(
-      titulo,
+  const p=
+    extrairPreco(
       texto,
-      link
+      item,
+      ud
     );
 
-  const motivos = [];
+  const a=
+    extrairArea(
+      texto,
+      busca.area,
+      ud
+    );
 
-  if(!link){
-    motivos.push('sem link');
+  const motivos=[];
+
+  if(!ehLinkIndividual(link)){
+    motivos.push(
+      'link não é anúncio individual'
+    );
   }
 
   if(!Number.isFinite(p.valor)){
-    motivos.push('sem preço identificado');
+    motivos.push(
+      'sem preço identificado'
+    );
   }
 
   if(!Number.isFinite(a.valor)){
-    motivos.push('sem área identificada');
+    motivos.push(
+      'sem área identificada'
+    );
+  }
+
+  const temApto=
+    /apartamento|\bapto\b|flat|studio/.test(nt);
+
+  const temCasa=
+    /\bcasa\b|sobrado/.test(nt);
+
+  let tipoStatus='ok';
+
+  if(
+    busca.tipo==='apartamento'
+    &&
+    temCasa
+    &&
+    !temApto
+  ){
+    tipoStatus='divergente';
   }
 
   if(
-    Number.isFinite(a.valor) &&
-    !areaOk
+    busca.tipo==='casa'
+    &&
+    temApto
+    &&
+    !temCasa
   ){
-    motivos.push('área fora da faixa');
+    tipoStatus='divergente';
   }
 
-  if(tipoStatus === 'divergente'){
-    motivos.push('tipo de imóvel divergente');
+  if(tipoStatus==='divergente'){
+    motivos.push(
+      'tipo de imóvel divergente'
+    );
   }
 
-  if(quartosStatus === 'divergente'){
-    motivos.push('quantidade de quartos divergente');
+  let quartosStatus='desconhecido';
+
+  if(busca.quartos){
+
+    const nums=[
+      ...nt.matchAll(
+        /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/g
+      )
+    ].map(
+      m=>Number(m[1])
+    );
+
+    if(Number.isFinite(ud.quartos)){
+      nums.unshift(
+        ud.quartos
+      );
+    }
+
+    quartosStatus=
+      !nums.length
+        ?'desconhecido'
+        :nums.includes(busca.quartos)
+          ?'ok'
+          :'divergente';
+
+    if(quartosStatus==='divergente'){
+      motivos.push(
+        'quantidade de quartos divergente'
+      );
+    }
   }
 
-  if(paginaInutil){
-    motivos.push(paginaInutil);
+  let diferencaArea=null;
+
+  if(busca.area&&a.valor){
+
+    diferencaArea=
+      Math.abs(
+        a.valor-busca.area
+      )
+      /
+      busca.area;
+
+    if(
+      diferencaArea>
+      TOLERANCIA_AREA
+    ){
+      motivos.push(
+        'área fora da faixa'
+      );
+    }
   }
 
-  const valido =
-    motivos.length === 0;
+  const valido=
+    motivos.length===0;
 
-  let score = 0;
+  const precoM2=
+    p.valor&&a.valor
+      ?p.valor/a.valor
+      :null;
 
-  score +=
-    tipoStatus === 'ok'
-      ? 25
-      : tipoStatus === 'desconhecido'
-        ? 12
-        : 0;
+  let score=0;
 
-  score +=
-    quartosStatus === 'ok'
-      ? 25
-      : quartosStatus === 'desconhecido'
-        ? 10
-        : 0;
+  score+=
+    tipoStatus==='ok'
+      ?25
+      :0;
 
-  if(Number.isFinite(diferencaArea)){
+  score+=
+    quartosStatus==='ok'
+      ?25
+      :quartosStatus==='desconhecido'
+        ?8
+        :0;
 
-    score += Math.max(
+  if(
+    Number.isFinite(
+      diferencaArea
+    )
+  ){
+
+    score+=Math.max(
       0,
-      40 * (
-        1 -
-        diferencaArea /
+      40*
+      (
+        1-
+        diferencaArea/
         TOLERANCIA_AREA
       )
     );
   }
 
-  if(p.valor && a.valor){
-    score += 10;
-  }
+  if(precoM2)
+    score+=10;
 
-  const precoM2 =
-    p.valor && a.valor
-      ? p.valor / a.valor
-      : null;
-
-  return {
+  return{
 
     titulo,
     descricao,
     link,
 
     fonte:
-      item.source ||
-      item.displayed_link ||
+      item.source
+      ||
+      item.displayed_link
+      ||
       '',
 
     preco:p.texto,
@@ -463,15 +494,16 @@ function avaliarItem(item,busca){
 
     motivo_descarte:
       valido
-        ? ''
-        : motivos.join('; '),
+        ?''
+        :motivos.join('; '),
 
     diagnostico:{
+      individual:
+        ehLinkIndividual(link),
+
       tipoStatus,
       quartosStatus,
-      areaOk,
-      diferencaArea,
-      paginaInutil
+      diferencaArea
     }
   };
 }
@@ -482,7 +514,7 @@ async function buscarSerp(
   num=20
 ){
 
-  const params =
+  const params=
     new URLSearchParams({
 
       engine:'google',
@@ -500,73 +532,73 @@ async function buscarSerp(
       api_key:apiKey
     });
 
-  const r =
+  const r=
     await fetch(
       `https://serpapi.com/search.json?${params}`
     );
 
-  const d =
+  const d=
     await r.json();
 
-  if(!r.ok || d.error){
+  if(!r.ok||d.error){
 
     throw new Error(
-      d.error ||
+      d.error
+      ||
       'Erro ao consultar a SerpApi.'
     );
   }
 
-  return d.organic_results || [];
+  return d.organic_results||[];
 }
 
 function semOutliers(comps){
 
-  if(comps.length < 4){
+  if(comps.length<4)
     return comps;
-  }
 
-  const v =
+  const v=
     comps
-      .map(x => x.preco_m2)
+      .map(x=>x.preco_m2)
       .filter(Number.isFinite)
       .sort((a,b)=>a-b);
 
-  if(v.length < 4){
+  if(v.length<4)
     return comps;
-  }
 
-  const q1 =
+  const q1=
     v[
       Math.floor(
-        (v.length-1) * .25
+        (v.length-1)*.25
       )
     ];
 
-  const q3 =
+  const q3=
     v[
       Math.floor(
-        (v.length-1) * .75
+        (v.length-1)*.75
       )
     ];
 
-  const iqr = q3 - q1;
+  const iqr=q3-q1;
 
-  const min =
-    q1 - 1.5 * iqr;
+  const min=
+    q1-1.5*iqr;
 
-  const max =
-    q3 + 1.5 * iqr;
+  const max=
+    q3+1.5*iqr;
 
-  const f =
+  const f=
     comps.filter(
-      x =>
-        x.preco_m2 >= min &&
-        x.preco_m2 <= max
+      x=>
+        x.preco_m2>=min
+        &&
+        x.preco_m2<=max
     );
 
-  return f.length >= MIN_COMPARAVEIS
-    ? f
-    : comps;
+  return f.length>=MIN_COMPARAVEIS
+    ?f
+    :comps;
 }
 
 function calcularAvaliacao(
@@ -575,61 +607,62 @@ function calcularAvaliacao(
 ){
 
   if(
-    !area ||
-    comps.length < MIN_COMPARAVEIS
+    !area
+    ||
+    comps.length<
+    MIN_COMPARAVEIS
   ){
 
-    return {
-
+    return{
       calculada:false,
 
       motivo:
         !area
-          ? 'Informe a área do imóvel na pesquisa para calcular a avaliação.'
-          : `Foram encontrados apenas ${comps.length} comparáveis válidos. São necessários pelo menos ${MIN_COMPARAVEIS}.`
+          ?
+          'Informe a área do imóvel na pesquisa para calcular a avaliação.'
+          :
+          `Foram encontrados apenas ${comps.length} comparáveis válidos. São necessários pelo menos ${MIN_COMPARAVEIS}.`
     };
   }
 
-  const base =
+  const base=
     semOutliers(comps);
 
-  const m2s =
+  const m2s=
     base
-      .map(x => x.preco_m2)
+      .map(x=>x.preco_m2)
       .filter(Number.isFinite);
 
-  const med =
+  const med=
     mediana(m2s);
 
-  const avg =
+  const avg=
     media(m2s);
 
   if(!med){
 
-    return {
-
+    return{
       calculada:false,
-
       motivo:
         'Não foi possível calcular o valor por m².'
     };
   }
 
-  const mercado =
-    med * area;
+  const mercado=
+    med*area;
 
-  const rapida =
-    mercado * .95;
+  const rapida=
+    mercado*.95;
 
-  const maximo =
-    mercado * 1.05;
+  const maximo=
+    mercado*1.05;
 
-  return {
+  return{
 
     calculada:true,
 
     metodologia:
-      'Mediana do preço por m² dos comparáveis válidos, com remoção de outliers quando existe base suficiente.',
+      'Mediana do preço por m² de anúncios individuais válidos, com remoção de outliers quando há base suficiente.',
 
     comparaveis_usados:
       base.length,
@@ -675,7 +708,7 @@ app.get(
         'AYRO ACM API online',
 
       versao:
-        'PRECISAO-V6',
+        'PRECISAO-V7',
 
       minimo_comparaveis:
         MIN_COMPARAVEIS
@@ -693,9 +726,9 @@ app.get(
 
     try{
 
-      const q =
+      const q=
         String(
-          req.query.q || ''
+          req.query.q||''
         ).trim();
 
       if(!q){
@@ -703,13 +736,12 @@ app.get(
         return res
           .status(400)
           .json({
-
             erro:
               'Informe uma pesquisa.'
           });
       }
 
-      const apiKey =
+      const apiKey=
         process.env.SERPAPI_KEY;
 
       if(!apiKey){
@@ -717,45 +749,44 @@ app.get(
         return res
           .status(500)
           .json({
-
             erro:
               'SERPAPI_KEY não configurada no servidor.'
           });
       }
 
-      const busca =
+      const busca=
         dadosDaBusca(q);
 
-      const vistos =
+      const vistos=
         new Set();
 
-      const unicos = [];
+      const unicos=[];
 
-      const adicionar =
-        organic => {
+      const adicionar=
+        organic=>{
 
-          for(const raw of organic){
+          for(
+            const raw of organic
+          ){
 
-            const x =
+            const x=
               avaliarItem(
                 raw,
                 busca
               );
 
-            if(!x.link){
+            if(!x.link)
               continue;
-            }
 
-            const k =
+            const k=
               normalizarLink(
                 x.link
               );
 
             if(
               vistos.has(k)
-            ){
+            )
               continue;
-            }
 
             vistos.add(k);
 
@@ -763,44 +794,23 @@ app.get(
           }
         };
 
-      const semArea =
-        q
-          .replace(
-            /\b\d+(?:[.,]\d+)?\s*m(?:²|2)(?![a-z0-9])/i,
-            ''
-          )
-          .replace(
-            /\s{2,}/g,
-            ' '
-          )
-          .trim();
+      const consultas=[
 
-      const semAreaQuartos =
-        semArea
-          .replace(
-            /\b\d+\s*(?:quartos?|dormitórios?|dormitorios?|dorms?|qtos?)\b/i,
-            ''
-          )
-          .replace(
-            /\s{2,}/g,
-            ' '
-          )
-          .trim();
+        `site:chavesnamao.com.br/imovel ${q} -aluguel`,
 
-      const consultas = [
+        `site:zapimoveis.com.br/imovel ${q} -aluguel`,
 
-        `${q} imóvel à venda preço R$ m² -youtube -instagram -facebook -tiktok`,
+        `site:vivareal.com.br/imovel ${q} -aluguel`,
 
-        `${semArea} imóvel à venda preço R$ m² -youtube -instagram -facebook -tiktok`,
+        `site:imovelweb.com.br/propriedades ${q} -aluguel`,
 
-        `${semAreaQuartos} imóvel à venda preço R$ m² -youtube -instagram -facebook -tiktok`
+        `${q} imóvel anúncio individual R$ m² -youtube -instagram -facebook -tiktok`
       ];
 
-      let chamadas = 0;
+      let chamadas=0;
 
       for(
-        const consulta of
-        [...new Set(consultas)]
+        const consulta of consultas
       ){
 
         adicionar(
@@ -815,21 +825,22 @@ app.get(
 
         if(
           unicos.filter(
-            x => x.comparavel_valido
-          ).length >= 8
+            x=>x.comparavel_valido
+          ).length>=8
         ){
           break;
         }
       }
 
-      const comparaveis =
+      const comparaveis=
         unicos
           .filter(
-            x => x.comparavel_valido
+            x=>x.comparavel_valido
           )
           .sort(
             (a,b)=>
-              b.score_similaridade -
+              b.score_similaridade
+              -
               a.score_similaridade
           )
           .slice(
@@ -837,18 +848,19 @@ app.get(
             MAX_COMPARAVEIS
           );
 
-      const referencias =
+      const referencias=
         unicos
           .filter(
-            x => !x.comparavel_valido
+            x=>!x.comparavel_valido
           )
           .sort(
             (a,b)=>
-              b.score_similaridade -
+              b.score_similaridade
+              -
               a.score_similaridade
           );
 
-      const avaliacao =
+      const avaliacao=
         calcularAvaliacao(
           comparaveis,
           busca.area
@@ -859,7 +871,7 @@ app.get(
         sucesso:true,
 
         versao:
-          'PRECISAO-V6',
+          'PRECISAO-V7',
 
         consulta:q,
 
@@ -905,33 +917,37 @@ app.get(
             'Erro interno na pesquisa.',
 
           detalhe:
-            e.message ||
+            e.message
+            ||
             String(e)
         });
     }
   }
 );
 
-const PORT =
-  process.env.PORT ||
+const PORT=
+  process.env.PORT
+  ||
   3000;
 
-if(require.main === module){
+if(
+  require.main===module
+){
 
   app.listen(
     PORT,
     ()=>
       console.log(
-        `AYRO ACM API PRECISAO-V6 rodando na porta ${PORT}`
+        `AYRO ACM API PRECISAO-V7 rodando na porta ${PORT}`
       )
   );
 }
 
-module.exports = {
+module.exports={
   app,
   dadosDaBusca,
-  extrairPreco,
-  extrairArea,
+  dadosDaUrl,
+  ehLinkIndividual,
   avaliarItem,
   calcularAvaliacao
 };
