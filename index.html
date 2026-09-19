@@ -577,11 +577,11 @@ async function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
  const beds=document.getElementById('beds').value,area=document.getElementById('area').value;
  if(!bairro||!city){alert('Informe pelo menos bairro e cidade para pesquisar comparáveis.');return}
- if(!area||Number(area)<=0){alert('Informe a área do imóvel para que a PRECISAO-V4 calcule a avaliação.');return}
+ if(!area||Number(area)<=0){alert('Informe a área do imóvel para que a PRECISAO-V5 calcule a avaliação.');return}
  const busca=`${type} à venda ${bairro} ${city} ${state} ${beds ? beds+' quartos' : ''} ${area ? area+' m²' : ''}`.trim();
  const API='https://ayro-acm-api.onrender.com';
  let win=window.open('','_blank');
- if(win) win.document.write('<h2 style="font-family:Arial">AYRO • pesquisando anúncios imobiliários...</h2><p style="font-family:Arial">Buscando comparáveis e calculando a avaliação pela PRECISAO-V4.</p>');
+ if(win) win.document.write('<h2 style="font-family:Arial">AYRO • pesquisando anúncios imobiliários...</h2><p style="font-family:Arial">Buscando comparáveis e calculando a avaliação pela PRECISAO-V5.</p>');
  try{
    const resp=await fetch(`${API}/search?q=${encodeURIComponent(busca)}`);
    const data=await resp.json();
@@ -615,8 +615,8 @@ async function openSearches(){
      let confidence='Baixa'; if(count>=6) confidence='Alta'; else if(count>=4) confidence='Média';
      document.getElementById('confidence').textContent=confidence;
      const owner=document.getElementById('owner').value||'proprietário';
-     document.getElementById('report').innerHTML=`<p>Para o imóvel de <strong>${esc(owner)}</strong>, localizado em <strong>${esc(bairro)}, ${esc(city)}</strong>, a PRECISAO-V4 utilizou <strong>${count} imóveis comparáveis</strong>. O preço mediano encontrado foi de <strong>R$ ${NUM.format(base)}/m²</strong>.</p><p>As três referências calculadas pelo servidor são: <strong>${BRL.format(quick)}</strong> para venda rápida, <strong>${BRL.format(market)}</strong> como valor de mercado e <strong>${BRL.format(upper)}</strong> como valor máximo sugerido.</p><p>${esc(avaliacao.metodologia||'Avaliação baseada nos comparáveis válidos encontrados.')}</p><p>Esta ACM representa opinião mercadológica baseada em preços anunciados e características comparáveis. Não substitui laudo técnico formal quando este for legalmente exigido.</p>`;
-     lastResult={base,quick,market,upper,confidence,count,serverVersion:data.versao||'PRECISAO-V4',metodologia:avaliacao.metodologia||''};
+     document.getElementById('report').innerHTML=`<p>Para o imóvel de <strong>${esc(owner)}</strong>, localizado em <strong>${esc(bairro)}, ${esc(city)}</strong>, a PRECISAO-V5 utilizou <strong>${count} imóveis comparáveis</strong>. O preço mediano encontrado foi de <strong>R$ ${NUM.format(base)}/m²</strong>.</p><p>As três referências calculadas pelo servidor são: <strong>${BRL.format(quick)}</strong> para venda rápida, <strong>${BRL.format(market)}</strong> como valor de mercado e <strong>${BRL.format(upper)}</strong> como valor máximo sugerido.</p><p>${esc(avaliacao.metodologia||'Avaliação baseada nos comparáveis válidos encontrados.')}</p><p>Esta ACM representa opinião mercadológica baseada em preços anunciados e características comparáveis. Não substitui laudo técnico formal quando este for legalmente exigido.</p>`;
+     lastResult={base,quick,market,upper,confidence,count,serverVersion:data.versao||'PRECISAO-V5',metodologia:avaliacao.metodologia||''};
    }else{
      lastResult=null;
      ['quick','market','upper','statPPM','confidence'].forEach(id=>document.getElementById(id).textContent='—');
@@ -627,13 +627,13 @@ async function openSearches(){
    const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0"><b>${ok?'✓ Comparável':'Referência descartada'} • ${esc(x.fonte||'Fonte')}</b><h3 style="margin:7px 0">${esc(x.titulo||'Anúncio')}</h3><div>${esc(x.preco||'Preço não identificado')} ${x.area?'• '+esc(x.area):''} ${x.preco_m2?`• R$ ${NUM.format(x.preco_m2)}/m²`:''}</div><p>${esc(x.descricao||'')}</p>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">Abrir anúncio</a>`:''}</div>`;
    if(win){
      win.document.open();
-     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis PRECISAO-V4</h2><p><b>${comparaveis.length}</b> comparável(is) válido(s). Mínimo exigido: <b>${data.minimo_comparaveis||3}</b>.</p>${avaliacao.calculada?`<div style="background:#fff8e5;border:1px solid #e0bd5b;border-radius:12px;padding:15px"><b>Avaliação calculada</b><p>Venda rápida: <b>${BRL.format(avaliacao.valor_venda_rapida)}</b><br>Valor de mercado: <b>${BRL.format(avaliacao.valor_mercado)}</b><br>Máximo sugerido: <b>${BRL.format(avaliacao.valor_maximo_sugerido)}</b></p></div>`:''}${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Resultados descartados pelo filtro</h2>'+referencias.map(x=>card(x,false)).join(''):''}</body>`);
+     win.document.write(`<!doctype html><meta charset="utf-8"><title>AYRO • Comparáveis</title><body style="font-family:Arial;max-width:900px;margin:30px auto;padding:0 18px"><h2>AYRO • Comparáveis PRECISAO-V5</h2><p><b>${comparaveis.length}</b> comparável(is) válido(s). Mínimo exigido: <b>${data.minimo_comparaveis||3}</b>.</p>${avaliacao.calculada?`<div style="background:#fff8e5;border:1px solid #e0bd5b;border-radius:12px;padding:15px"><b>Avaliação calculada</b><p>Venda rápida: <b>${BRL.format(avaliacao.valor_venda_rapida)}</b><br>Valor de mercado: <b>${BRL.format(avaliacao.valor_mercado)}</b><br>Máximo sugerido: <b>${BRL.format(avaliacao.valor_maximo_sugerido)}</b></p></div>`:''}${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?'<h2>Resultados descartados pelo filtro</h2>'+referencias.map(x=>card(x,false)).join(''):''}</body>`);
      win.document.close();
    }
    if(!avaliacao.calculada){
      alert(avaliacao.motivo||`Foram encontrados apenas ${rows.length} comparáveis válidos. A ACM não será calculada.`);
    }else{
-     alert(`${rows.length} comparáveis válidos carregados. A PRECISAO-V4 já calculou as 3 opções de valor e os links reais estão disponíveis.`);
+     alert(`${rows.length} comparáveis válidos carregados. A PRECISAO-V5 já calculou as 3 opções de valor e os links reais estão disponíveis.`);
    }
  }catch(e){
    if(win)win.close();
