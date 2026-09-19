@@ -1,75 +1,84 @@
-const express=require('express');
-const cors=require('cors');
-const app=express();
+const express = require('express');
+const cors = require('cors');
+
+const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-const MIN_COMPARAVEIS=3;
-const MAX_COMPARAVEIS=10;
-const TOLERANCIA_AREA=0.35;
+const MIN_COMPARAVEIS = 3;
+const MAX_COMPARAVEIS = 10;
+const TOLERANCIA_AREA = 0.30;
+const FETCH_TIMEOUT_MS = 6500;
 
-const norm=s=>String(s||'')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g,'')
-  .toLowerCase();
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+  'AppleWebKit/537.36 Chrome/126 Safari/537.36';
 
-function numeroBR(v){
-  if(v==null||v==='')return null;
+const norm = s =>
+  String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
-  let s=String(v)
-    .trim()
-    .replace(/\s/g,'')
-    .replace(/^R\$/i,'')
-    .replace(/[^0-9.,]/g,'');
-
-  if(!s)return null;
-
-  if(s.includes(',')&&s.includes('.')){
-    s=s.replace(/\./g,'').replace(',','.');
-  }else if(s.includes(',')){
-    s=s.replace(',','.');
-  }else if(/^\d{1,3}(\.\d{3})+$/.test(s)){
-    s=s.replace(/\./g,'');
-  }
-
-  const n=Number(s);
-  return Number.isFinite(n)?n:null;
-}
-
-function moeda(v){
-  return Number.isFinite(v)
-    ? v.toLocaleString('pt-BR',{
-        style:'currency',
-        currency:'BRL',
-        maximumFractionDigits:0
+const moeda = v =>
+  Number.isFinite(v)
+    ? v.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        maximumFractionDigits: 0
       })
     : null;
+
+function numeroBR(v) {
+  if (v == null || v === '') return null;
+
+  let s = String(v)
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/^R\$/i, '')
+    .replace(/[^0-9.,]/g, '');
+
+  if (!s) return null;
+
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, '');
+  }
+
+  const n = Number(s);
+
+  return Number.isFinite(n) ? n : null;
 }
 
-function mediana(a){
-  const v=a.filter(Number.isFinite).sort((x,y)=>x-y);
+function mediana(a) {
+  const v = a
+    .filter(Number.isFinite)
+    .sort((x, y) => x - y);
 
-  if(!v.length)return null;
+  if (!v.length) return null;
 
-  const m=Math.floor(v.length/2);
+  const m = Math.floor(v.length / 2);
 
-  return v.length%2
+  return v.length % 2
     ? v[m]
-    : (v[m-1]+v[m])/2;
+    : (v[m - 1] + v[m]) / 2;
 }
 
-function media(a){
-  const v=a.filter(Number.isFinite);
+function media(a) {
+  const v = a.filter(Number.isFinite);
 
   return v.length
-    ? v.reduce((x,y)=>x+y,0)/v.length
+    ? v.reduce((x, y) => x + y, 0) / v.length
     : null;
 }
 
-function normalizarLink(link=''){
-  try{
-    const u=new URL(link);
+function normalizarLink(link = '') {
+  try {
+    const u = new URL(link);
 
     [
       'utm_source',
@@ -80,606 +89,882 @@ function normalizarLink(link=''){
       'gclid',
       'fbclid',
       'relatedAds'
-    ].forEach(k=>u.searchParams.delete(k));
+    ].forEach(k => u.searchParams.delete(k));
 
-    return (u.origin+u.pathname).replace(/\/$/,'');
-
-  }catch{
+    return (u.origin + u.pathname).replace(/\/$/, '');
+  } catch {
     return String(link)
       .split('?')[0]
-      .replace(/\/$/,'');
+      .replace(/\/$/, '');
   }
 }
 
-function dadosDaBusca(q){
+function dadosDaBusca(q) {
+  const nq = norm(q);
 
-  const nq=norm(q);
-
-  const tipo=
+  const tipo =
     /apartamento|\bapto\b|flat|studio/.test(nq)
       ? 'apartamento'
       : /\bcasa\b|sobrado/.test(nq)
-        ? 'casa'
-        : '';
+      ? 'casa'
+      : '';
 
-  const qm=nq.match(
+  const qm = nq.match(
     /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/i
   );
 
-  const am=nq.match(
+  const am = nq.match(
     /(\d+(?:[.,]\d+)?)\s*m(?:²|2)(?![a-z0-9])/i
   );
 
-  return{
+  return {
     tipo,
-    quartos:qm?Number(qm[1]):null,
-    area:am?numeroBR(am[1]):null
+    quartos: qm ? Number(qm[1]) : null,
+    area: am ? numeroBR(am[1]) : null
   };
 }
 
-function dadosDaUrl(link=''){
+function dadosDaUrl(link = '') {
+  let s = '';
 
-  let s='';
-
-  try{
-    s=decodeURIComponent(
-      String(link||'')
+  try {
+    s = decodeURIComponent(
+      String(link || '')
     ).toLowerCase();
-  }catch{
-    s=String(link||'').toLowerCase();
+  } catch {
+    s = String(link || '').toLowerCase();
   }
 
-  const q=s.match(
+  const q = s.match(
     /(?:-|\/)(\d+)-quartos?(?:-|\/)/i
   );
 
-  const a=s.match(
+  const a = s.match(
     /(?:-|\/)(\d+(?:[.,]\d+)?)(?:m2|m²)(?:-|\/)/i
   );
 
-  const p=s.match(
+  const p = s.match(
     /(?:-|\/)(?:rs|r\$)(\d{5,9})(?:\/|\?|$)/i
   );
 
-  return{
-    quartos:q?Number(q[1]):null,
-    area:a?numeroBR(a[1]):null,
-    preco:p?numeroBR(p[1]):null
+  return {
+    quartos: q ? Number(q[1]) : null,
+    area: a ? numeroBR(a[1]) : null,
+    preco: p ? numeroBR(p[1]) : null
   };
 }
 
-function ehLinkIndividual(link=''){
+function ehLinkIndividual(link = '') {
+  const l = String(link || '').toLowerCase();
 
-  const l=String(link||'').toLowerCase();
+  if (!l) return false;
 
-  if(!l)return false;
-
-  if(
+  if (
     /chavesnamao\.com\.br\/imovel\//i.test(l) &&
     /\/id-\d+/i.test(l)
-  ){
+  ) {
     return true;
   }
 
-  if(
+  if (
     /imovelweb\.com\.br\/propriedades\//i.test(l)
-  ){
+  ) {
     return true;
   }
 
-  if(
+  if (
     /(?:zapimoveis|vivareal)\.com\.br\/imovel\//i.test(l)
-  ){
+  ) {
     return true;
   }
 
-  if(
-    /\/(?:imovel|imoveis)\//i.test(l) &&
+  if (
+    /\/(?:imovel|imoveis|property|properties)\//i.test(l) &&
     !/\/(?:busca|search)\/?(?:\?|$)/i.test(l)
-  ){
+  ) {
     return true;
   }
 
   return false;
 }
 
-function extrairPreco(texto,item,urlData){
+function precosNoTexto(texto) {
+  const out = [];
 
-  const c=[];
-
-  if(Number.isFinite(urlData?.preco)){
-    c.push(urlData.preco);
-  }
-
-  for(const k of ['price','preco']){
-    if(item?.[k]!=null){
-      c.push(item[k]);
-    }
-  }
-
-  for(
+  for (
     const m of
     String(texto).match(
       /R\$\s*[0-9]{2,3}(?:[.\s][0-9]{3})*(?:,[0-9]{2})?|R\$\s*[0-9]{5,9}/gi
-    )||[]
-  ){
-    c.push(m);
-  }
+    ) || []
+  ) {
+    const n = numeroBR(m);
 
-  for(const x of c){
-
-    const n=
-      typeof x==='number'
-        ? x
-        : numeroBR(x);
-
-    if(
+    if (
       Number.isFinite(n) &&
-      n>=50000 &&
-      n<=100000000
-    ){
-      return{
-        texto:`R$ ${Math.round(n).toLocaleString('pt-BR')}`,
-        valor:n
-      };
+      n >= 50000 &&
+      n <= 100000000
+    ) {
+      out.push(n);
     }
   }
 
-  return{
-    texto:'',
-    valor:null
-  };
+  return [...new Set(out)];
 }
 
-function extrairArea(texto,alvo,urlData){
+function areasNoTexto(texto) {
+  const out = [];
 
-  const vals=[];
-
-  if(Number.isFinite(urlData?.area)){
-    vals.push(urlData.area);
-  }
-
-  for(
+  for (
     const m of String(texto).matchAll(
       /(\d+(?:[.,]\d+)?)\s*m(?:²|2)(?![a-z0-9])/gi
     )
-  ){
+  ) {
+    const n = numeroBR(m[1]);
 
-    const n=numeroBR(m[1]);
-
-    if(
+    if (
       Number.isFinite(n) &&
-      n>=15 &&
-      n<=100000
-    ){
-      vals.push(n);
+      n >= 15 &&
+      n <= 100000
+    ) {
+      out.push(n);
     }
   }
 
-  const u=[...new Set(vals)];
+  return [...new Set(out)];
+}
 
-  if(!u.length){
-    return{
-      texto:'',
-      valor:null
-    };
+function quartosNoTexto(texto) {
+  return [
+    ...new Set(
+      [
+        ...norm(texto).matchAll(
+          /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/g
+        )
+      ]
+        .map(m => Number(m[1]))
+        .filter(n => n > 0 && n < 30)
+    )
+  ];
+}
+
+function escolherArea(vals, alvo) {
+  if (!vals.length) return null;
+
+  return Number.isFinite(alvo)
+    ? [...vals].sort(
+        (a, b) =>
+          Math.abs(a - alvo) -
+          Math.abs(b - alvo)
+      )[0]
+    : vals[0];
+}
+
+function extrairJsonLd(html) {
+  const dados = [];
+
+  const re =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+  let m;
+
+  while ((m = re.exec(html))) {
+    try {
+      const x = JSON.parse(m[1].trim());
+
+      dados.push(
+        ...(Array.isArray(x) ? x : [x])
+      );
+    } catch {}
   }
 
-  const n=
-    Number.isFinite(alvo)
-      ? u.sort(
-          (a,b)=>
-            Math.abs(a-alvo)-
-            Math.abs(b-alvo)
-        )[0]
-      : u[0];
+  return dados;
+}
 
-  return{
-    texto:`${String(n).replace('.',',')} m²`,
-    valor:n
+function caminhar(obj, fn, depth = 0) {
+  if (
+    obj == null ||
+    depth > 7
+  ) {
+    return;
+  }
+
+  if (Array.isArray(obj)) {
+    obj.forEach(
+      x => caminhar(x, fn, depth + 1)
+    );
+
+    return;
+  }
+
+  if (typeof obj === 'object') {
+    fn(obj);
+
+    Object.values(obj).forEach(
+      x => caminhar(x, fn, depth + 1)
+    );
+  }
+}
+
+function extrairDaPagina(html, busca) {
+  const clean = String(html || '')
+    .replace(
+      /<script[\s\S]*?<\/script>/gi,
+      ' '
+    )
+    .replace(
+      /<style[\s\S]*?<\/style>/gi,
+      ' '
+    )
+    .replace(/<[^>]+>/g, ' ')
+    .replace(
+      /&nbsp;|&#160;/gi,
+      ' '
+    )
+    .replace(
+      /&sup2;|&#178;/gi,
+      '²'
+    )
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ');
+
+  const precos =
+    precosNoTexto(clean);
+
+  const areas =
+    areasNoTexto(clean);
+
+  const quartos =
+    quartosNoTexto(clean);
+
+  const structured = {
+    precos: [],
+    areas: [],
+    quartos: []
+  };
+
+  for (
+    const root of
+    extrairJsonLd(html)
+  ) {
+    caminhar(root, o => {
+      for (
+        const [k, v] of
+        Object.entries(o)
+      ) {
+        if (
+          /^(price|lowPrice|highPrice)$/i.test(k)
+        ) {
+          const n = numeroBR(v);
+
+          if (
+            Number.isFinite(n) &&
+            n >= 50000
+          ) {
+            structured.precos.push(n);
+          }
+        }
+
+        if (
+          /floorSize|area|size/i.test(k)
+        ) {
+          const val =
+            typeof v === 'object'
+              ? (
+                  v.value ||
+                  v.amount ||
+                  ''
+                )
+              : v;
+
+          const n =
+            numeroBR(val);
+
+          if (
+            Number.isFinite(n) &&
+            n >= 15 &&
+            n <= 100000
+          ) {
+            structured.areas.push(n);
+          }
+        }
+
+        if (
+          /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
+        ) {
+          const n = Number(v);
+
+          if (
+            Number.isFinite(n) &&
+            n > 0 &&
+            n < 30
+          ) {
+            structured.quartos.push(n);
+          }
+        }
+      }
+    });
+  }
+
+  const metaPrice = [
+    ...String(html).matchAll(
+      /(?:property|name)=["'][^"']*(?:price|preco)[^"']*["'][^>]*content=["']([^"']+)/gi
+    )
+  ]
+    .map(m => numeroBR(m[1]))
+    .filter(
+      n =>
+        Number.isFinite(n) &&
+        n >= 50000
+    );
+
+  const allPrecos = [
+    ...new Set([
+      ...structured.precos,
+      ...metaPrice,
+      ...precos
+    ])
+  ];
+
+  const allAreas = [
+    ...new Set([
+      ...structured.areas,
+      ...areas
+    ])
+  ];
+
+  const allQuartos = [
+    ...new Set([
+      ...structured.quartos,
+      ...quartos
+    ])
+  ];
+
+  return {
+    preco:
+      allPrecos[0] || null,
+
+    area:
+      escolherArea(
+        allAreas,
+        busca.area
+      ),
+
+    quartos:
+      allQuartos,
+
+    texto:
+      clean.slice(0, 20000)
   };
 }
 
-function avaliarItem(item,busca){
+async function enriquecerPagina(
+  item,
+  busca
+) {
+  if (!ehLinkIndividual(item.link)) {
+    return item;
+  }
 
-  const titulo=item.title||'';
-  const descricao=item.snippet||'';
-  const link=item.link||'';
+  const ctrl =
+    new AbortController();
 
-  const texto=`${titulo} ${descricao}`;
-  const nt=norm(texto);
+  const timer =
+    setTimeout(
+      () => ctrl.abort(),
+      FETCH_TIMEOUT_MS
+    );
 
-  const ud=dadosDaUrl(link);
+  try {
+    const r =
+      await fetch(
+        item.link,
+        {
+          signal: ctrl.signal,
 
-  const p=extrairPreco(
-    texto,
-    item,
-    ud
-  );
+          redirect: 'follow',
 
-  const a=extrairArea(
-    texto,
-    busca.area,
-    ud
-  );
+          headers: {
+            'user-agent': UA,
 
-  const motivos=[];
+            'accept-language':
+              'pt-BR,pt;q=0.9,en;q=0.7',
 
-  if(!ehLinkIndividual(link)){
+            'accept':
+              'text/html,application/xhtml+xml'
+          }
+        }
+      );
+
+    if (!r.ok) {
+      return item;
+    }
+
+    const ct =
+      r.headers.get(
+        'content-type'
+      ) || '';
+
+    if (
+      !ct.includes('text/html')
+    ) {
+      return item;
+    }
+
+    const html =
+      await r.text();
+
+    const p =
+      extrairDaPagina(
+        html,
+        busca
+      );
+
+    return {
+      ...item,
+      _pagina: p
+    };
+
+  } catch {
+    return item;
+
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function avaliarItem(
+  item,
+  busca
+) {
+  const titulo =
+    item.title || '';
+
+  const descricao =
+    item.snippet || '';
+
+  const link =
+    item.link || '';
+
+  const texto =
+    `${titulo} ${descricao}`;
+
+  const ud =
+    dadosDaUrl(link);
+
+  const pg =
+    item._pagina || {};
+
+  const precos = [
+    ud.preco,
+    pg.preco,
+    ...precosNoTexto(texto)
+  ].filter(Number.isFinite);
+
+  const preco =
+    precos[0] || null;
+
+  const areas = [
+    ud.area,
+    pg.area,
+    ...areasNoTexto(texto)
+  ].filter(Number.isFinite);
+
+  const area =
+    escolherArea(
+      [...new Set(areas)],
+      busca.area
+    );
+
+  const quartos = [
+    ud.quartos,
+    ...(pg.quartos || []),
+    ...quartosNoTexto(texto)
+  ].filter(Number.isFinite);
+
+  const motivos = [];
+
+  if (
+    !ehLinkIndividual(link)
+  ) {
     motivos.push(
       'link não é anúncio individual'
     );
   }
 
-  if(!Number.isFinite(p.valor)){
+  if (
+    !Number.isFinite(preco)
+  ) {
     motivos.push(
       'sem preço identificado'
     );
   }
 
-  if(!Number.isFinite(a.valor)){
+  if (
+    !Number.isFinite(area)
+  ) {
     motivos.push(
       'sem área identificada'
     );
   }
 
-  const temApto=
-    /apartamento|\bapto\b|flat|studio/.test(nt);
+  const textoTipo =
+    norm(
+      `${texto} ${pg.texto || ''}`
+    );
 
-  const temCasa=
-    /\bcasa\b|sobrado/.test(nt);
+  const temApto =
+    /apartamento|\bapto\b|flat|studio/.test(
+      textoTipo
+    );
 
-  let tipoStatus='ok';
+  const temCasa =
+    /\bcasa\b|sobrado/.test(
+      textoTipo
+    );
 
-  if(
-    busca.tipo==='apartamento' &&
+  if (
+    busca.tipo === 'apartamento' &&
     temCasa &&
     !temApto
-  ){
-    tipoStatus='divergente';
-  }
-
-  if(
-    busca.tipo==='casa' &&
-    temApto &&
-    !temCasa
-  ){
-    tipoStatus='divergente';
-  }
-
-  if(tipoStatus==='divergente'){
+  ) {
     motivos.push(
       'tipo de imóvel divergente'
     );
   }
 
-  let quartosStatus='desconhecido';
-
-  if(busca.quartos){
-
-    const nums=[
-      ...nt.matchAll(
-        /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/g
-      )
-    ].map(m=>Number(m[1]));
-
-    if(Number.isFinite(ud.quartos)){
-      nums.unshift(ud.quartos);
-    }
-
-    quartosStatus=
-      !nums.length
-        ? 'desconhecido'
-        : nums.includes(busca.quartos)
-          ? 'ok'
-          : 'divergente';
-
-    if(quartosStatus==='divergente'){
-      motivos.push(
-        'quantidade de quartos divergente'
-      );
-    }
+  if (
+    busca.tipo === 'casa' &&
+    temApto &&
+    !temCasa
+  ) {
+    motivos.push(
+      'tipo de imóvel divergente'
+    );
   }
 
-  let diferencaArea=null;
+  if (
+    busca.quartos &&
+    quartos.length &&
+    !quartos.includes(
+      busca.quartos
+    )
+  ) {
+    motivos.push(
+      'quantidade de quartos divergente'
+    );
+  }
 
-  if(busca.area&&a.valor){
+  let diferencaArea = null;
 
-    diferencaArea=
+  if (
+    busca.area &&
+    area
+  ) {
+    diferencaArea =
       Math.abs(
-        a.valor-busca.area
-      )/busca.area;
+        area - busca.area
+      ) /
+      busca.area;
 
-    if(
-      diferencaArea>
+    if (
+      diferencaArea >
       TOLERANCIA_AREA
-    ){
+    ) {
       motivos.push(
         'área fora da faixa'
       );
     }
   }
 
-  const valido=
-    motivos.length===0;
-
-  const precoM2=
-    p.valor&&a.valor
-      ? p.valor/a.valor
+  const precoM2 =
+    preco && area
+      ? preco / area
       : null;
 
-  let score=0;
+  let score = 20;
 
-  score+=
-    tipoStatus==='ok'
-      ?25
-      :0;
+  if (
+    busca.quartos &&
+    quartos.includes(
+      busca.quartos
+    )
+  ) {
+    score += 30;
+  }
 
-  score+=
-    quartosStatus==='ok'
-      ?25
-      :quartosStatus==='desconhecido'
-        ?8
-        :0;
-
-  if(Number.isFinite(diferencaArea)){
-
-    score+=Math.max(
+  if (
+    Number.isFinite(
+      diferencaArea
+    )
+  ) {
+    score += Math.max(
       0,
-      40*(
-        1-
-        diferencaArea/
+      40 * (
+        1 -
+        diferencaArea /
         TOLERANCIA_AREA
       )
     );
   }
 
-  if(precoM2){
-    score+=10;
+  if (precoM2) {
+    score += 10;
   }
 
-  return{
+  return {
     titulo,
     descricao,
     link,
 
     fonte:
-      item.source||
-      item.displayed_link||
+      item.source ||
+      item.displayed_link ||
       '',
 
-    preco:p.texto,
-    area:a.texto,
+    preco:
+      Number.isFinite(preco)
+        ? `R$ ${Math.round(preco).toLocaleString('pt-BR')}`
+        : '',
 
-    preco_valor:p.valor,
-    area_valor:a.valor,
+    area:
+      Number.isFinite(area)
+        ? `${String(area).replace('.', ',')} m²`
+        : '',
 
-    preco_m2:precoM2,
+    preco_valor:
+      preco,
+
+    area_valor:
+      area,
+
+    preco_m2:
+      precoM2,
 
     score_similaridade:
       Math.round(score),
 
     comparavel_valido:
-      valido,
+      motivos.length === 0,
 
     motivo_descarte:
-      valido
-        ?''
-        :motivos.join('; '),
+      motivos.join('; '),
 
-    diagnostico:{
+    diagnostico: {
       individual:
         ehLinkIndividual(link),
 
-      tipoStatus,
-      quartosStatus,
+      dados_pagina:
+        Boolean(item._pagina),
+
       diferencaArea
     }
   };
 }
 
-/*
- * IMPORTANTE:
- * Uma pesquisa vazia da SerpApi NÃO interrompe
- * mais todas as outras pesquisas.
- */
 async function buscarSerp(
   apiKey,
   q,
-  num=20
-){
-
-  try{
-
-    const params=
+  num = 20
+) {
+  try {
+    const params =
       new URLSearchParams({
-
-        engine:'google',
-
+        engine: 'google',
         q,
-
-        hl:'pt-br',
-
-        gl:'br',
-
-        num:String(num),
-
-        api_key:apiKey
+        hl: 'pt-br',
+        gl: 'br',
+        num: String(num),
+        api_key: apiKey
       });
 
-    const r=
+    const r =
       await fetch(
         `https://serpapi.com/search.json?${params}`
       );
 
-    const d=
+    const d =
       await r.json();
 
-    if(!r.ok){
+    if (!r.ok) {
+      return {
+        resultados: [],
 
-      return{
-        resultados:[],
         erro:
-          d.error||
+          d.error ||
           `HTTP ${r.status}`,
 
         fatal:
-          r.status===401||
-          r.status===403||
-          r.status===429
+          [401, 403, 429]
+            .includes(r.status)
       };
     }
 
-    /*
-     * SerpApi pode retornar algo como:
-     * "Google hasn't returned any results..."
-     *
-     * Isso agora NÃO derruba toda a pesquisa.
-     */
-    if(d.error){
+    if (d.error) {
+      return {
+        resultados: [],
 
-      return{
-        resultados:[],
-        erro:String(d.error),
+        erro:
+          String(d.error),
 
         fatal:
           /invalid api key|unauthorized|credits|account|rate limit/i
-            .test(String(d.error))
+            .test(
+              String(d.error)
+            )
       };
     }
 
-    return{
+    return {
       resultados:
-        Array.isArray(d.organic_results)
-          ?d.organic_results
-          :[],
+        Array.isArray(
+          d.organic_results
+        )
+          ? d.organic_results
+          : [],
 
-      erro:'',
-      fatal:false
+      erro: '',
+      fatal: false
     };
 
-  }catch(e){
+  } catch (e) {
+    return {
+      resultados: [],
 
-    return{
-      resultados:[],
       erro:
-        e.message||
+        e.message ||
         String(e),
 
-      fatal:false
+      fatal: false
     };
   }
 }
 
-function semOutliers(comps){
-
-  if(comps.length<4){
+function semOutliers(comps) {
+  if (
+    comps.length < 4
+  ) {
     return comps;
   }
 
-  const v=
+  const v =
     comps
-      .map(x=>x.preco_m2)
-      .filter(Number.isFinite)
-      .sort((a,b)=>a-b);
+      .map(
+        x => x.preco_m2
+      )
+      .filter(
+        Number.isFinite
+      )
+      .sort(
+        (a, b) => a - b
+      );
 
-  if(v.length<4){
+  if (
+    v.length < 4
+  ) {
     return comps;
   }
 
-  const q1=
+  const q1 =
     v[
       Math.floor(
-        (v.length-1)*.25
+        (v.length - 1) *
+        .25
       )
     ];
 
-  const q3=
+  const q3 =
     v[
       Math.floor(
-        (v.length-1)*.75
+        (v.length - 1) *
+        .75
       )
     ];
 
-  const iqr=q3-q1;
+  const iqr =
+    q3 - q1;
 
-  const min=
-    q1-1.5*iqr;
+  const min =
+    q1 - 1.5 * iqr;
 
-  const max=
-    q3+1.5*iqr;
+  const max =
+    q3 + 1.5 * iqr;
 
-  const f=
+  const f =
     comps.filter(
-      x=>
-        x.preco_m2>=min &&
-        x.preco_m2<=max
+      x =>
+        x.preco_m2 >= min &&
+        x.preco_m2 <= max
     );
 
-  return f.length>=MIN_COMPARAVEIS
-    ?f
-    :comps;
+  return (
+    f.length >=
+    MIN_COMPARAVEIS
+  )
+    ? f
+    : comps;
 }
 
 function calcularAvaliacao(
   comps,
   area
-){
-
-  if(
+) {
+  if (
     !area ||
-    comps.length<
+    comps.length <
     MIN_COMPARAVEIS
-  ){
-
-    return{
-      calculada:false,
+  ) {
+    return {
+      calculada: false,
 
       motivo:
         !area
-          ?'Informe a área do imóvel na pesquisa para calcular a avaliação.'
-          :`Foram encontrados apenas ${comps.length} comparáveis válidos. São necessários pelo menos ${MIN_COMPARAVEIS}.`
+          ? 'Informe a área do imóvel na pesquisa para calcular a avaliação.'
+          : `Foram encontrados apenas ${comps.length} comparáveis válidos. São necessários pelo menos ${MIN_COMPARAVEIS}.`
     };
   }
 
-  const base=
+  const base =
     semOutliers(comps);
 
-  const m2s=
+  const m2s =
     base
-      .map(x=>x.preco_m2)
-      .filter(Number.isFinite);
+      .map(
+        x => x.preco_m2
+      )
+      .filter(
+        Number.isFinite
+      );
 
-  const med=
+  const med =
     mediana(m2s);
 
-  const avg=
+  const avg =
     media(m2s);
 
-  if(!med){
-
-    return{
-      calculada:false,
+  if (!med) {
+    return {
+      calculada: false,
 
       motivo:
         'Não foi possível calcular o valor por m².'
     };
   }
 
-  const mercado=
-    med*area;
+  const mercado =
+    med * area;
 
-  const rapida=
-    mercado*.95;
+  const rapida =
+    mercado * .95;
 
-  const maximo=
-    mercado*1.05;
+  const maximo =
+    mercado * 1.05;
 
-  return{
-    calculada:true,
+  return {
+    calculada: true,
 
     metodologia:
-      'Mediana do preço por m² de anúncios individuais válidos, com remoção de outliers quando há base suficiente.',
+      'Mediana do preço por m² de anúncios individuais validados. Quando possível, preço, área e quartos são confirmados na própria página do anúncio.',
 
     comparaveis_usados:
       base.length,
@@ -702,7 +987,7 @@ function calcularAvaliacao(
     valor_maximo_sugerido:
       Math.round(maximo),
 
-    valores_formatados:{
+    valores_formatados: {
       venda_rapida:
         moeda(rapida),
 
@@ -717,13 +1002,13 @@ function calcularAvaliacao(
 
 app.get(
   '/',
-  (req,res)=>
+  (req, res) =>
     res.json({
       status:
         'AYRO ACM API online',
 
       versao:
-        'PRECISAO-V8',
+        'PRECISAO-V9',
 
       minimo_comparaveis:
         MIN_COMPARAVEIS
@@ -737,17 +1022,14 @@ app.get(
     '/search'
   ],
 
-  async(req,res)=>{
-
-    try{
-
-      const q=
+  async (req, res) => {
+    try {
+      const q =
         String(
-          req.query.q||''
+          req.query.q || ''
         ).trim();
 
-      if(!q){
-
+      if (!q) {
         return res
           .status(400)
           .json({
@@ -756,11 +1038,10 @@ app.get(
           });
       }
 
-      const apiKey=
+      const apiKey =
         process.env.SERPAPI_KEY;
 
-      if(!apiKey){
-
+      if (!apiKey) {
         return res
           .status(500)
           .json({
@@ -769,50 +1050,15 @@ app.get(
           });
       }
 
-      const busca=
+      const busca =
         dadosDaBusca(q);
 
-      const vistos=
+      const vistos =
         new Set();
 
-      const unicos=[];
+      const candidatos = [];
 
-      const adicionar=
-        organic=>{
-
-          for(const raw of organic){
-
-            const x=
-              avaliarItem(
-                raw,
-                busca
-              );
-
-            if(!x.link){
-              continue;
-            }
-
-            const k=
-              normalizarLink(
-                x.link
-              );
-
-            if(vistos.has(k)){
-              continue;
-            }
-
-            vistos.add(k);
-
-            unicos.push(x);
-          }
-        };
-
-      /*
-       * Remove área exata da consulta.
-       * Ex.: 100 m² não limita a pesquisa do Google.
-       * A proximidade de área é analisada depois.
-       */
-      const semArea=
+      const semArea =
         q
           .replace(
             /\b\d+(?:[.,]\d+)?\s*m(?:²|2)(?![a-z0-9])/i,
@@ -824,82 +1070,45 @@ app.get(
           )
           .trim();
 
-      const semAreaQuartos=
-        semArea
-          .replace(
-            /\b\d+\s*(?:quartos?|dormitórios?|dormitorios?|dorms?|qtos?)\b/i,
-            ''
-          )
-          .replace(
-            /\s{2,}/g,
-            ' '
-          )
-          .trim();
+      const consultas = [
+        `site:imovelweb.com.br/propriedades ${semArea} venda`,
 
-      /*
-       * Tenta diferentes fontes.
-       * Se UMA não retornar resultados,
-       * passa automaticamente para a próxima.
-       */
-      const consultas=[
+        `site:chavesnamao.com.br/imovel ${semArea} venda`,
 
-        `site:chavesnamao.com.br/imovel ${semArea} -aluguel`,
+        `site:vivareal.com.br/imovel ${semArea} venda`,
 
-        `site:zapimoveis.com.br/imovel ${semArea} -aluguel`,
+        `site:zapimoveis.com.br/imovel ${semArea} venda`,
 
-        `site:vivareal.com.br/imovel ${semArea} -aluguel`,
+        `${semArea} "Teresópolis" imóvel venda preço`,
 
-        `site:imovelweb.com.br/propriedades ${semArea} -aluguel`,
-
-        `${semArea} imóvel à venda R$ m² -aluguel -youtube -instagram -facebook -tiktok`,
-
-        `${semAreaQuartos} imóvel à venda R$ m² -aluguel -youtube -instagram -facebook -tiktok`
+        `${semArea} imóvel venda R$`
       ];
 
-      let chamadas=0;
+      const erros_busca = [];
 
-      const erros_busca=[];
-
-      for(
+      for (
         const consulta of
         [...new Set(consultas)]
-      ){
-
-        const tentativa=
+      ) {
+        const t =
           await buscarSerp(
             apiKey,
             consulta,
-            30
+            20
           );
 
-        chamadas++;
-
-        if(tentativa.erro){
-
+        if (t.erro) {
           erros_busca.push({
             consulta,
             erro:
-              tentativa.erro
+              t.erro
           });
         }
 
-        /*
-         * Mesmo se resultados=[],
-         * continua normalmente.
-         */
-        adicionar(
-          tentativa.resultados
-        );
-
-        /*
-         * Só interrompe por erro realmente fatal
-         * da conta/chave da SerpApi.
-         */
-        if(
-          tentativa.fatal &&
-          unicos.length===0
-        ){
-
+        if (
+          t.fatal &&
+          candidatos.length === 0
+        ) {
           return res
             .status(502)
             .json({
@@ -907,35 +1116,140 @@ app.get(
                 'Falha na SerpApi.',
 
               detalhe:
-                tentativa.erro,
+                t.erro,
 
               versao:
-                'PRECISAO-V8'
+                'PRECISAO-V9'
             });
         }
 
-        /*
-         * Já temos uma boa amostra.
-         */
-        if(
-          unicos.filter(
-            x=>
-              x.comparavel_valido
-          ).length>=8
-        ){
+        for (
+          const raw of
+          t.resultados
+        ) {
+          if (!raw.link) {
+            continue;
+          }
+
+          const k =
+            normalizarLink(
+              raw.link
+            );
+
+          if (
+            vistos.has(k)
+          ) {
+            continue;
+          }
+
+          vistos.add(k);
+
+          candidatos.push(raw);
+        }
+
+        if (
+          candidatos.filter(
+            x =>
+              ehLinkIndividual(
+                x.link
+              )
+          ).length >= 12
+        ) {
           break;
         }
       }
 
-      const comparaveis=
-        unicos
+      const individuais =
+        candidatos
           .filter(
-            x=>
+            x =>
+              ehLinkIndividual(
+                x.link
+              )
+          )
+          .slice(
+            0,
+            16
+          );
+
+      const enriquecidos = [];
+
+      for (
+        let i = 0;
+        i < individuais.length;
+        i += 4
+      ) {
+        const lote =
+          individuais.slice(
+            i,
+            i + 4
+          );
+
+        enriquecidos.push(
+          ...await Promise.all(
+            lote.map(
+              x =>
+                enriquecerPagina(
+                  x,
+                  busca
+                )
+            )
+          )
+        );
+
+        if (
+          enriquecidos
+            .map(
+              x =>
+                avaliarItem(
+                  x,
+                  busca
+                )
+            )
+            .filter(
+              x =>
+                x.comparavel_valido
+            )
+            .length >= 8
+        ) {
+          break;
+        }
+      }
+
+      const processados = [
+        ...enriquecidos.map(
+          x =>
+            avaliarItem(
+              x,
+              busca
+            )
+        ),
+
+        ...candidatos
+          .filter(
+            x =>
+              !ehLinkIndividual(
+                x.link
+              )
+          )
+          .map(
+            x =>
+              avaliarItem(
+                x,
+                busca
+              )
+          )
+      ];
+
+      const comparaveis =
+        processados
+          .filter(
+            x =>
               x.comparavel_valido
           )
           .sort(
-            (a,b)=>
-              b.score_similaridade-
+            (a, b) =>
+              b.score_similaridade -
               a.score_similaridade
           )
           .slice(
@@ -943,41 +1257,42 @@ app.get(
             MAX_COMPARAVEIS
           );
 
-      const referencias=
-        unicos
+      const referencias =
+        processados
           .filter(
-            x=>
+            x =>
               !x.comparavel_valido
           )
           .sort(
-            (a,b)=>
-              b.score_similaridade-
+            (a, b) =>
+              b.score_similaridade -
               a.score_similaridade
+          )
+          .slice(
+            0,
+            30
           );
 
-      const avaliacao=
+      const avaliacao =
         calcularAvaliacao(
           comparaveis,
           busca.area
         );
 
       res.json({
-
-        sucesso:true,
+        sucesso: true,
 
         versao:
-          'PRECISAO-V8',
+          'PRECISAO-V9',
 
-        consulta:q,
+        consulta:
+          q,
 
         criterios:
           busca,
 
-        chamadas_busca:
-          chamadas,
-
         total:
-          unicos.length,
+          processados.length,
 
         total_comparaveis:
           comparaveis.length,
@@ -991,16 +1306,17 @@ app.get(
 
         avaliacao,
 
-        resultados:[
+        erros_busca,
+
+        resultados: [
           ...comparaveis,
           ...referencias
         ]
       });
 
-    }catch(e){
-
+    } catch (e) {
       console.error(
-        'ERRO AYRO:',
+        'ERRO AYRO V9:',
         e
       );
 
@@ -1011,33 +1327,38 @@ app.get(
             'Erro interno na pesquisa.',
 
           detalhe:
-            e.message||
-            String(e)
+            e.message ||
+            String(e),
+
+          versao:
+            'PRECISAO-V9'
         });
     }
   }
 );
 
-const PORT=
-  process.env.PORT||
+const PORT =
+  process.env.PORT ||
   3000;
 
-if(require.main===module){
-
+if (
+  require.main === module
+) {
   app.listen(
     PORT,
-    ()=>
+    () =>
       console.log(
-        `AYRO ACM API PRECISAO-V8 rodando na porta ${PORT}`
+        `AYRO ACM API PRECISAO-V9 rodando na porta ${PORT}`
       )
   );
 }
 
-module.exports={
+module.exports = {
   app,
   dadosDaBusca,
   dadosDaUrl,
   ehLinkIndividual,
+  extrairDaPagina,
   avaliarItem,
   calcularAvaliacao
 };
