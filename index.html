@@ -580,31 +580,33 @@ function refreshDashboard(){
 function refreshAll(){refreshDashboard();renderHistory();renderClients();renderRows();loadSettings()}
 async function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
- const beds=document.getElementById('beds').value,area=document.getElementById('area').value;
+ const beds=document.getElementById('beds').value,area=document.getElementById('area').value,suites=document.getElementById('suites').value,parking=document.getElementById('parking').value;
+ const condo=document.getElementById('condo').value,condition=document.getElementById('condition').selectedOptions?.[0]?.text||'',features=document.getElementById('features').value.trim();
  const pool=document.getElementById('pool')?.value||'nao',sauna=document.getElementById('sauna')?.value||'nao';
  if(!city){alert('Cidade é obrigatória.');document.getElementById('city').focus();return}
  if(!bairro){alert('Bairro é obrigatório.');document.getElementById('bairro').focus();return}
- const extras=[pool==='sim'?'piscina':'',sauna==='sim'?'sauna':''].filter(Boolean).join(' ');
+ const extras=[suites?suites+' suítes':'',parking?parking+' vagas':'',pool==='sim'?'piscina':'',sauna==='sim'?'sauna':'',features].filter(Boolean).join(' ');
  const busca=`${type} à venda ${bairro} ${city} ${state} ${beds ? beds+' quartos' : ''} ${area ? area+' m²' : ''} ${extras}`.trim();
  const API='https://ayro-acm-api.onrender.com';
+ const params=new URLSearchParams({q:busca,cidade:city,bairro,tipo:type,area,quartos:beds,suites,vagas:parking,condominio:condo,conservacao:condition,piscina:pool,sauna,diferenciais:features});
  const status=document.getElementById('searchStatus'),results=document.getElementById('searchResults'),btn=document.getElementById('searchComparablesBtn');
- if(status){status.style.display='block';status.textContent='AYRO está buscando imóveis comparáveis...';}
+ if(status){status.style.display='block';status.textContent='AYRO está buscando e classificando os imóveis mais semelhantes...';}
  if(results)results.innerHTML='';
  if(btn){btn.disabled=true;btn.textContent='⏳ Pesquisando...';}
  try{
-   const resp=await fetch(`${API}/search?q=${encodeURIComponent(busca)}`);
+   const resp=await fetch(`${API}/search?${params.toString()}`);
    const data=await resp.json();
    if(!resp.ok || data.erro) throw new Error(data.erro||'Falha na API');
    const comparaveis=Array.isArray(data.comparaveis)?data.comparaveis:[];
    const referencias=Array.isArray(data.referencias)?data.referencias:[];
    const parseMoney=v=>{if(!v)return 0;let x=String(v).replace(/[^0-9.,]/g,'');if(x.includes(','))x=x.replace(/\./g,'').replace(',','.');return Number(x)||0};
    const parseArea=v=>Number(String(v||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
-   rows=comparaveis.map(x=>({source:x.fonte||'Outro',bairro,area:Number(x.area_valor)||parseArea(x.area),price:Number(x.preco_valor)||parseMoney(x.preco),sim:Number(x.score_similaridade)||5,note:x.link||'',eligible:true})).filter(x=>x.area>0&&x.price>0&&x.note);
+   rows=comparaveis.map(x=>({source:x.fonte||'Outro',bairro,area:Number(x.area_valor)||parseArea(x.area),price:Number(x.preco_valor)||parseMoney(x.preco),sim:Math.max(1,Math.min(5,Math.ceil((Number(x.score_similaridade)||50)/20))),similarityPct:Number(x.score_similaridade)||0,note:x.link||'',eligible:true})).filter(x=>x.area>0&&x.price>0&&x.note);
    renderRows();
    const safe=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-   const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0;background:#fff"><b>${ok?'✓ Comparável':'Referência descartada'} • ${safe(x.fonte||'Fonte')}</b><h3 style="margin:7px 0">${safe(x.titulo||'Anúncio')}</h3><div>${safe(x.preco||'Preço não identificado')} ${x.area?'• '+safe(x.area):''}${x.preco_m2?' • R$ '+safe(x.preco_m2)+'/m²':''}</div><p class="muted">${safe(x.descricao||'')}</p>${x.link?`<a class="btn light" href="${safe(x.link)}" target="_blank" rel="noopener">🔗 Abrir anúncio</a>`:''}</div>`;
-   if(results){results.innerHTML=`<div class="card" style="padding:14px"><div class="head"><h2 style="margin:0">Comparáveis encontrados</h2><span class="badge green">${comparaveis.length} válidos</span></div>${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?`<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:800">Ver ${referencias.length} resultado(s) descartado(s)</summary>${referencias.map(x=>card(x,false)).join('')}</details>`:''}</div>`;}
-   if(status)status.textContent=rows.length>=3?`${rows.length} comparáveis válidos carregados. Você já pode calcular a ACM.`:`Foram encontrados apenas ${rows.length} comparável(is) válido(s). São necessários pelo menos 3 para calcular a ACM.`;
+   const card=(x,ok)=>`<div style="border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0;background:#fff"><b>${ok?'✓ Comparável':'Referência descartada'} • ${safe(x.fonte||'Fonte')}</b><span class="badge green" style="float:right">${Number(x.score_similaridade)||0}% similar</span><h3 style="margin:7px 0">${safe(x.titulo||'Anúncio')}</h3><div>${safe(x.preco||'Preço não identificado')} ${x.area?'• '+safe(x.area):''}${x.preco_m2?' • R$ '+Math.round(Number(x.preco_m2)).toLocaleString('pt-BR')+'/m²':''}</div><p class="muted">${safe(x.descricao||'')}</p>${x.link?`<a class="btn light" href="${safe(x.link)}" target="_blank" rel="noopener">🔗 Abrir anúncio</a>`:''}</div>`;
+   if(results){const av=data.avaliacao||{};const resumo=av.calculada?`<div class="notice" style="margin:10px 0"><b>Similaridade média: ${av.similaridade_media||0}%</b> • ${av.comparaveis_usados||comparaveis.length} comparáveis usados • Referência: ${av.preco_m2_referencia?'R$ '+Number(av.preco_m2_referencia).toLocaleString('pt-BR')+'/m²':'—'}</div>`:'';results.innerHTML=`<div class="card" style="padding:14px"><div class="head"><h2 style="margin:0">Comparáveis encontrados</h2><span class="badge green">${comparaveis.length} válidos</span></div>${resumo}${comparaveis.map(x=>card(x,true)).join('')}${referencias.length?`<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:800">Ver ${referencias.length} resultado(s) descartado(s)</summary>${referencias.map(x=>card(x,false)).join('')}</details>`:''}</div>`;}
+   if(status)status.textContent=rows.length>=3?`${rows.length} comparáveis válidos carregados e classificados por similaridade. Você já pode calcular a ACM.`:`Foram encontrados apenas ${rows.length} comparável(is) válido(s). São necessários pelo menos 3 para calcular a ACM.`;
    if(rows.length<3)lastResult=null;
  }catch(e){
    if(status){status.style.display='block';status.textContent='Não foi possível consultar a API AYRO: '+e.message;}
