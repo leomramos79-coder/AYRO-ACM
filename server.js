@@ -1,408 +1,470 @@
-const express = require("express");
-const cors = require("cors");
+const express = require('express');
+const cors = require('cors');
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
 const MIN_COMPARAVEIS = 3;
-const MAX_COMPARAVEIS = 8;
-const TOLERANCIA_AREA = 0.35;
+const MAX_COMPARAVEIS = 10;
+const TOLERANCIA_AREA = 0.40;
 
-function numeroBR(valor) {
-  if (valor === null || valor === undefined || valor === "") return null;
+const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 
-  let s = String(valor)
-    .trim()
-    .replace(/\s/g, "")
-    .replace(/^R\$/i, "");
-
-  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) {
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else if (/^\d+(,\d+)?$/.test(s)) {
-    s = s.replace(",", ".");
-  } else {
-    s = s.replace(/[^0-9.,]/g, "");
-
-    if (s.includes(",") && s.includes(".")) {
-      s = s.replace(/\./g, "").replace(",", ".");
-    } else if (s.includes(",")) {
-      s = s.replace(",", ".");
-    }
-  }
-
-  const n = Number(s);
-
-  return Number.isFinite(n) ? n : null;
+function numeroBR(valor){
+  if(valor===null||valor===undefined||valor==='') return null;
+  let s=String(valor).trim().replace(/\s/g,'').replace(/^R\$/i,'').replace(/[^0-9.,]/g,'');
+  if(!s) return null;
+  if(s.includes(',') && s.includes('.')) s=s.replace(/\./g,'').replace(',','.');
+  else if(s.includes(',')) s=s.replace(',','.');
+  else if(/^\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');
+  const n=Number(s); return Number.isFinite(n)?n:null;
 }
 
-function moeda(valor) {
-  return Number.isFinite(valor)
-    ? valor.toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-        maximumFractionDigits: 0
+function moeda(v){
+  return Number.isFinite(v)
+    ? v.toLocaleString('pt-BR',{
+        style:'currency',
+        currency:'BRL',
+        maximumFractionDigits:0
       })
     : null;
 }
 
-function mediana(lista) {
-  const v = lista
-    .filter(Number.isFinite)
-    .sort((a, b) => a - b);
-
-  if (!v.length) return null;
-
-  const m = Math.floor(v.length / 2);
-
-  return v.length % 2
-    ? v[m]
-    : (v[m - 1] + v[m]) / 2;
+function mediana(a){
+  const v=a.filter(Number.isFinite).sort((x,y)=>x-y);
+  if(!v.length)return null;
+  const m=Math.floor(v.length/2);
+  return v.length%2?v[m]:(v[m-1]+v[m])/2;
 }
 
-function media(lista) {
-  const v = lista.filter(Number.isFinite);
-
-  return v.length
-    ? v.reduce((a, b) => a + b, 0) / v.length
-    : null;
+function media(a){
+  const v=a.filter(Number.isFinite);
+  return v.length?v.reduce((x,y)=>x+y,0)/v.length:null;
 }
 
-function normalizarLink(link = "") {
-  try {
-    const u = new URL(link);
+function normalizarLink(link=''){
+  try{
+    const u=new URL(link);
 
     [
-      "utm_source",
-      "utm_medium",
-      "utm_campaign",
-      "utm_term",
-      "utm_content",
-      "gclid",
-      "fbclid"
-    ].forEach(k => u.searchParams.delete(k));
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_term',
+      'utm_content',
+      'gclid',
+      'fbclid'
+    ].forEach(k=>u.searchParams.delete(k));
 
-    return (u.origin + u.pathname).replace(/\/$/, "");
-  } catch {
-    return String(link)
-      .split("?")[0]
-      .replace(/\/$/, "");
+    return (u.origin+u.pathname).replace(/\/$/,'');
+  }catch{
+    return String(link).split('?')[0].replace(/\/$/,'');
   }
 }
 
-function dadosDaBusca(q) {
-  const tipo =
-    /apartamento|apto|flat|studio/i.test(q)
-      ? "apartamento"
-      : /\bcasa\b|sobrado/i.test(q)
-      ? "casa"
-      : "";
+function dadosDaBusca(q){
 
-  const qm =
-    q.match(
-      /(\d+)\s*(?:quartos?|dormitórios?)/i
-    );
+  const nq=norm(q);
 
-  const am =
-    q.match(
-      /(\d+(?:[.,]\d+)?)\s*m(?:²|2)\b/i
+  const tipo=
+    /apartamento|\bapto\b|flat|studio/.test(nq)
+      ? 'apartamento'
+      : /\bcasa\b|sobrado/.test(nq)
+        ? 'casa'
+        : '';
+
+  const qm=nq.match(
+    /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/i
+  );
+
+  const am=nq.match(
+    /(\d+(?:[.,]\d+)?)\s*m(?:²|2)\b/i
+  );
+
+  const local=(
+    nq.split(
+      /\b(?:\d+\s*(?:quartos?|dormitorios?|dorms?|qtos?)|\d+(?:[.,]\d+)?\s*m(?:²|2))\b/i
+    )[0] || ''
+  )
+  .replace(
+    /apartamento|\bapto\b|flat|studio|\bcasa\b|sobrado|a venda|venda/gi,
+    ' '
+  )
+  .replace(/\s+/g,' ')
+  .trim();
+
+  const tokensLocal=local
+    .split(/\s+/)
+    .filter(
+      x=>x.length>=3 &&
+      !['para','com','imovel'].includes(x)
     );
 
   return {
     tipo,
-    quartos: qm
-      ? Number(qm[1])
-      : null,
-
-    area: am
-      ? numeroBR(am[1])
-      : null
+    quartos:qm?Number(qm[1]):null,
+    area:am?numeroBR(am[1]):null,
+    tokensLocal
   };
 }
 
-function extrairPreco(texto, item) {
-  const candidatos = [];
+function textoCompleto(item){
 
-  if (item.price) {
-    candidatos.push(item.price);
+  let extra='';
+
+  try{
+    extra=JSON.stringify({
+      rich_snippet:item.rich_snippet||{},
+      detected_extensions:item.detected_extensions||{},
+      extensions:item.extensions||[]
+    });
+  }catch{}
+
+  return `${item.title||''} ${item.snippet||''} ${extra}`;
+}
+
+function extrairPreco(texto,item){
+
+  const candidatos=[];
+
+  for(const key of ['price','preco']){
+    if(item?.[key]!=null){
+      candidatos.push(String(item[key]));
+    }
   }
 
-  const regex =
-    /R\$\s?[\d.]+(?:,\d{2})?/gi;
+  const re=
+    /R\$\s*[0-9]{2,3}(?:[.\s][0-9]{3})*(?:,[0-9]{2})?|R\$\s*[0-9]{5,9}/gi;
 
-  const achados =
-    texto.match(regex) || [];
-
-  for (const p of achados) {
-    candidatos.push(p);
+  for(const m of String(texto).match(re)||[]){
+    candidatos.push(m);
   }
 
-  for (const c of candidatos) {
-    const n = numeroBR(c);
+  const walk=(o,depth=0)=>{
 
-    if (
+    if(!o||depth>4)return;
+
+    if(Array.isArray(o)){
+      return o.forEach(v=>walk(v,depth+1));
+    }
+
+    if(typeof o==='object'){
+
+      for(const [k,v] of Object.entries(o)){
+
+        if(
+          /price|preco/i.test(k) &&
+          (typeof v==='string'||typeof v==='number')
+        ){
+          candidatos.push(String(v));
+        }else{
+          walk(v,depth+1);
+        }
+      }
+    }
+  };
+
+  walk(item?.rich_snippet);
+  walk(item?.detected_extensions);
+
+  for(const c of candidatos){
+
+    const n=numeroBR(c);
+
+    if(
       Number.isFinite(n) &&
-      n >= 50000 &&
-      n <= 100000000
-    ) {
+      n>=50000 &&
+      n<=100000000
+    ){
       return {
-        texto:
-          typeof c === "string"
-            ? c
-            : String(c),
-
-        valor: n
+        texto:`R$ ${Math.round(n).toLocaleString('pt-BR')}`,
+        valor:n
       };
     }
   }
 
   return {
-    texto: "",
-    valor: null
+    texto:'',
+    valor:null
   };
 }
 
-function extrairArea(texto) {
-  const matches =
-    [
-      ...texto.matchAll(
-        /(\d+(?:[.,]\d+)?)\s*m(?:²|2)\b/gi
-      )
-    ];
+function extrairArea(texto,areaAlvo){
 
-  for (const m of matches) {
-    const n = numeroBR(m[1]);
+  const vals=[];
 
-    if (
+  for(
+    const m of String(texto).matchAll(
+      /(\d+(?:[.,]\d+)?)\s*m(?:²|2)\b/gi
+    )
+  ){
+
+    const n=numeroBR(m[1]);
+
+    if(
       Number.isFinite(n) &&
-      n >= 15 &&
-      n <= 100000
-    ) {
-      return {
-        texto: `${m[1]} m²`,
-        valor: n
-      };
+      n>=15 &&
+      n<=100000
+    ){
+      vals.push(n);
     }
   }
 
+  if(!vals.length){
+    return {
+      texto:'',
+      valor:null
+    };
+  }
+
+  const un=[...new Set(vals)];
+
+  const n=Number.isFinite(areaAlvo)
+    ? un.sort(
+        (a,b)=>
+          Math.abs(a-areaAlvo)-
+          Math.abs(b-areaAlvo)
+      )[0]
+    : un[0];
+
   return {
-    texto: "",
-    valor: null
+    texto:`${String(n).replace('.',',')} m²`,
+    valor:n
   };
 }
 
-function paginaColetiva(
-  titulo,
-  texto,
-  link
-) {
+function paginaColetiva(titulo,texto,link){
+
+  const t=norm(titulo);
+  const all=norm(texto);
+  const l=String(link||'').toLowerCase();
+
+  const contagem=
+    /\b\d+\s+(?:imoveis|apartamentos|casas|anuncios)\b/.test(t);
+
+  const tituloCategoria=
+    /^(?:imoveis|apartamentos|casas)\s+(?:para|a)\s+venda\b/.test(t) ||
+    /(?:imoveis|apartamentos|casas)\s+(?:para|a)\s+venda\s+em\b/.test(t);
+
+  const urlBusca=
+    /\/busca(?:\/|\?|$)|\/search(?:\/|\?|$)|[?&](?:q|busca|search)=/i.test(l);
+
+  /*
+    IMPORTANTE:
+    não descarta simplesmente porque a URL contém /imoveis/.
+    Muitos anúncios individuais usam essa estrutura.
+  */
+
   return (
-    /\b\d+\s+(?:imóveis|apartamentos|casas|anúncios)\b/i.test(
-      texto
-    ) ||
-
-    /imóveis\s+(?:para|à)\s+venda/i.test(
-      titulo
-    ) ||
-
-    /apartamentos?\s+com\s+\d+\s+quartos?\s+(?:para|à)\s+venda/i.test(
-      titulo
-    ) ||
-
-    /\/busca|\/imoveis|\/venda\/?$/i.test(
-      link || ""
+    contagem ||
+    tituloCategoria ||
+    urlBusca ||
+    (
+      /pagina\s+\d+/.test(all) &&
+      !/R\$/.test(texto)
     )
   );
 }
 
-function avaliarItem(item, busca) {
-  const titulo =
-    item.title || "";
+function avaliarItem(item,busca){
 
-  const descricao =
-    item.snippet || "";
+  const titulo=item.title||'';
+  const descricao=item.snippet||'';
+  const link=item.link||'';
 
-  const link =
-    item.link || "";
+  const texto=textoCompleto(item);
+  const nt=norm(texto);
 
-  const texto =
-    `${titulo} ${descricao}`;
+  const p=extrairPreco(texto,item);
+  const a=extrairArea(texto,busca.area);
 
-  const p =
-    extrairPreco(
-      texto,
-      item
+  const temApto=
+    /apartamento|\bapto\b|flat|studio/.test(nt);
+
+  const temCasa=
+    /\bcasa\b|sobrado/.test(nt);
+
+  let tipoStatus='desconhecido';
+
+  if(busca.tipo==='apartamento'){
+
+    tipoStatus=
+      temApto&&!temCasa
+        ? 'ok'
+        : temCasa
+          ? 'divergente'
+          : 'desconhecido';
+
+  }else if(busca.tipo==='casa'){
+
+    tipoStatus=
+      temCasa&&!temApto
+        ? 'ok'
+        : temApto
+          ? 'divergente'
+          : 'desconhecido';
+
+  }else{
+
+    tipoStatus='ok';
+  }
+
+  let quartosStatus='ok';
+
+  if(busca.quartos){
+
+    const nums=[
+      ...nt.matchAll(
+        /(\d+)\s*(?:quartos?|dormitorios?|dorms?|qtos?)/g
+      )
+    ].map(
+      m=>Number(m[1])
     );
 
-  const a =
-    extrairArea(texto);
-
-  let tipoOk = true;
-
-  if (
-    busca.tipo ===
-    "apartamento"
-  ) {
-    tipoOk =
-      /apartamento|apto|flat|studio/i.test(
-        texto
-      ) &&
-      !/\bcasa\b|sobrado/i.test(
-        texto
-      );
-  } else if (
-    busca.tipo ===
-    "casa"
-  ) {
-    tipoOk =
-      /\bcasa\b|sobrado/i.test(
-        texto
-      ) &&
-      !/apartamento|apto|flat|studio/i.test(
-        texto
-      );
+    quartosStatus=
+      !nums.length
+        ? 'desconhecido'
+        : nums.includes(busca.quartos)
+          ? 'ok'
+          : 'divergente';
   }
 
-  let quartosOk = true;
+  let diferencaArea=null;
+  let areaOk=Number.isFinite(a.valor);
 
-  if (busca.quartos) {
-    quartosOk =
-      new RegExp(
-        `\\b${busca.quartos}\\s*(?:quartos?|dormitórios?)`,
-        "i"
-      ).test(texto);
-  }
+  if(busca.area&&a.valor){
 
-  let areaOk = true;
-  let diferencaArea = null;
-
-  if (
-    busca.area &&
-    a.valor
-  ) {
-    diferencaArea =
-      Math.abs(
-        a.valor -
-        busca.area
-      ) /
+    diferencaArea=
+      Math.abs(a.valor-busca.area)/
       busca.area;
 
-    areaOk =
-      diferencaArea <=
-      TOLERANCIA_AREA;
+    areaOk=
+      diferencaArea<=TOLERANCIA_AREA;
   }
 
-  const social =
-    /instagram\.com|facebook\.com|youtube\.com|tiktok\.com/i.test(
-      link
-    );
+  const social=
+    /instagram\.com|facebook\.com|youtube\.com|tiktok\.com|pinterest\./i.test(link);
 
-  const coletiva =
+  const coletiva=
     paginaColetiva(
       titulo,
       texto,
       link
     );
 
-  const comparavelValido =
+  const localHits=
+    (busca.tokensLocal||[])
+      .filter(
+        t=>nt.includes(t)
+      ).length;
+
+  /*
+    Divergência explícita elimina.
+
+    Se o Google simplesmente não mostrar
+    alguma informação no resumo,
+    isso não elimina automaticamente
+    o anúncio.
+  */
+
+  const valido=
     Boolean(link) &&
-    Number.isFinite(
-      p.valor
-    ) &&
-    Number.isFinite(
-      a.valor
-    ) &&
-    tipoOk &&
-    quartosOk &&
+    Number.isFinite(p.valor) &&
+    Number.isFinite(a.valor) &&
     areaOk &&
+    tipoStatus!=='divergente' &&
+    quartosStatus!=='divergente' &&
     !social &&
     !coletiva;
 
-  let score = 0;
+  let score=0;
 
-  if (tipoOk) {
-    score += 30;
+  score+=
+    tipoStatus==='ok'
+      ?25
+      :tipoStatus==='desconhecido'
+        ?10
+        :0;
+
+  score+=
+    quartosStatus==='ok'
+      ?20
+      :quartosStatus==='desconhecido'
+        ?8
+        :0;
+
+  if(Number.isFinite(diferencaArea)){
+
+    score+=Math.max(
+      0,
+      35*(
+        1-
+        diferencaArea/
+        TOLERANCIA_AREA
+      )
+    );
   }
 
-  if (quartosOk) {
-    score += 25;
+  if(p.valor&&a.valor){
+    score+=10;
   }
 
-  if (
-    Number.isFinite(
-      diferencaArea
-    )
-  ) {
-    score +=
-      Math.max(
-        0,
-        35 *
-          (
-            1 -
-            diferencaArea /
-              TOLERANCIA_AREA
-          )
-      );
-  } else if (
-    !busca.area &&
-    a.valor
-  ) {
-    score += 35;
-  }
+  score+=Math.min(
+    10,
+    localHits*3
+  );
 
-  if (
-    p.valor &&
-    a.valor
-  ) {
-    score += 10;
-  }
-
-  const precoM2 =
-    p.valor &&
-    a.valor
-      ? p.valor /
-        a.valor
-      : null;
+  const precoM2=
+    p.valor&&a.valor
+      ?p.valor/a.valor
+      :null;
 
   return {
+
     titulo,
     descricao,
     link,
 
     fonte:
-      item.source ||
-      item.displayed_link ||
-      "",
+      item.source||
+      item.displayed_link||
+      '',
 
-    preco:
-      p.texto,
+    preco:p.texto,
+    area:a.texto,
 
-    area:
-      a.texto,
+    preco_valor:p.valor,
+    area_valor:a.valor,
 
-    preco_valor:
-      p.valor,
-
-    area_valor:
-      a.valor,
-
-    preco_m2:
-      precoM2,
+    preco_m2:precoM2,
 
     score_similaridade:
       Math.round(score),
 
     comparavel_valido:
-      comparavelValido,
+      valido,
 
-    diagnostico: {
-      tipoOk,
-      quartosOk,
+    diagnostico:{
+
+      tipoStatus,
+      quartosStatus,
+
       areaOk,
+      diferencaArea,
+
+      localHits,
+
       social,
+
       paginaColetiva:
-        coletiva
+        coletiva,
+
+      temPreco:
+        Number.isFinite(p.valor),
+
+      temArea:
+        Number.isFinite(a.valor)
     }
   };
 }
@@ -410,421 +472,387 @@ function avaliarItem(item, busca) {
 async function buscarSerp(
   apiKey,
   q,
-  num = 20
-) {
-  const buscaOtimizada =
-    q +
-    " imóvel à venda anúncio preço R$ m²" +
-    " -youtube -instagram -facebook -tiktok";
+  num=20
+){
 
-  const params =
+  const params=
     new URLSearchParams({
-      engine: "google",
-      q: buscaOtimizada,
-      location: "Brazil",
-      hl: "pt-br",
-      gl: "br",
-      num: String(num),
-      api_key: apiKey
+
+      engine:'google',
+
+      q,
+
+      location:'Brazil',
+
+      hl:'pt-br',
+
+      gl:'br',
+
+      num:String(num),
+
+      api_key:apiKey
     });
 
-  const resposta =
+  const r=
     await fetch(
-      `https://serpapi.com/search.json?${params.toString()}`
+      `https://serpapi.com/search.json?${params}`
     );
 
-  const dados =
-    await resposta.json();
+  const d=
+    await r.json();
 
-  if (
-    !resposta.ok ||
-    dados.error
-  ) {
+  if(!r.ok||d.error){
+
     throw new Error(
-      dados.error ||
-      "Erro ao consultar a SerpApi."
+      d.error||
+      'Erro ao consultar a SerpApi.'
     );
   }
 
-  return (
-    dados.organic_results ||
-    []
-  );
+  return d.organic_results||[];
 }
 
-function semOutliers(
-  comparaveis
-) {
-  if (
-    comparaveis.length <
-    4
-  ) {
-    return comparaveis;
+function semOutliers(comps){
+
+  if(comps.length<4){
+    return comps;
   }
 
-  const valores =
-    comparaveis
-      .map(
-        x =>
-          x.preco_m2
-      )
-      .filter(
-        Number.isFinite
-      )
-      .sort(
-        (a, b) =>
-          a - b
-      );
+  const v=
+    comps
+      .map(x=>x.preco_m2)
+      .filter(Number.isFinite)
+      .sort((a,b)=>a-b);
 
-  const q1 =
-    valores[
+  if(v.length<4){
+    return comps;
+  }
+
+  const pick=
+    p=>v[
       Math.floor(
-        (valores.length - 1) *
-          0.25
+        (v.length-1)*p
       )
     ];
 
-  const q3 =
-    valores[
-      Math.floor(
-        (valores.length - 1) *
-          0.75
-      )
-    ];
+  const q1=pick(.25);
+  const q3=pick(.75);
 
-  const iqr =
-    q3 - q1;
+  const iqr=q3-q1;
 
-  const min =
-    q1 -
-    1.5 * iqr;
+  const min=
+    q1-
+    1.5*iqr;
 
-  const max =
-    q3 +
-    1.5 * iqr;
+  const max=
+    q3+
+    1.5*iqr;
 
-  const filtrados =
-    comparaveis.filter(
-      x =>
-        x.preco_m2 >= min &&
-        x.preco_m2 <= max
+  const f=
+    comps.filter(
+      x=>
+        x.preco_m2>=min &&
+        x.preco_m2<=max
     );
 
-  return (
-    filtrados.length >=
-    MIN_COMPARAVEIS
-      ? filtrados
-      : comparaveis
-  );
+  return f.length>=MIN_COMPARAVEIS
+    ?f
+    :comps;
 }
 
 function calcularAvaliacao(
-  comparaveis,
-  areaBusca
-) {
-  if (
-    !areaBusca ||
-    comparaveis.length <
-      MIN_COMPARAVEIS
-  ) {
+  comps,
+  area
+){
+
+  if(
+    !area ||
+    comps.length<MIN_COMPARAVEIS
+  ){
+
     return {
-      calculada: false,
+
+      calculada:false,
 
       motivo:
-        !areaBusca
-          ? "Informe a área do imóvel na pesquisa para calcular a avaliação."
-          : `Foram encontrados apenas ${comparaveis.length} comparáveis válidos. São necessários pelo menos ${MIN_COMPARAVEIS}.`
+        !area
+          ?'Informe a área do imóvel na pesquisa para calcular a avaliação.'
+          :`Foram encontrados apenas ${comps.length} comparáveis válidos. São necessários pelo menos ${MIN_COMPARAVEIS}.`
     };
   }
 
-  const base =
-    semOutliers(
-      comparaveis
-    );
+  const base=
+    semOutliers(comps);
 
-  const precosM2 =
+  const m2s=
     base
-      .map(
-        x =>
-          x.preco_m2
-      )
-      .filter(
-        Number.isFinite
-      );
+      .map(x=>x.preco_m2)
+      .filter(Number.isFinite);
 
-  const medianaM2 =
-    mediana(
-      precosM2
-    );
+  const med=
+    mediana(m2s);
 
-  const mediaM2 =
-    media(
-      precosM2
-    );
+  const avg=
+    media(m2s);
 
-  if (!medianaM2) {
+  if(!med){
+
     return {
-      calculada: false,
+
+      calculada:false,
+
       motivo:
-        "Não foi possível calcular o valor por m²."
+        'Não foi possível calcular o valor por m².'
     };
   }
 
-  const mercado =
-    medianaM2 *
-    areaBusca;
+  const mercado=
+    med*area;
 
-  const vendaRapida =
-    mercado *
-    0.95;
+  const rapida=
+    mercado*.95;
 
-  const valorMaximo =
-    mercado *
-    1.05;
+  const maximo=
+    mercado*1.05;
 
   return {
-    calculada: true,
+
+    calculada:true,
 
     metodologia:
-      "Mediana do preço por m² dos comparáveis válidos, com remoção de outliers quando há base suficiente.",
+      'Mediana do preço por m² dos comparáveis válidos; outliers são removidos quando há base suficiente. Resultados com divergência explícita de tipo, quartos ou área são excluídos.',
 
     comparaveis_usados:
       base.length,
 
     area_avaliada_m2:
-      areaBusca,
+      area,
 
     preco_m2_mediano:
-      Math.round(
-        medianaM2
-      ),
+      Math.round(med),
 
     preco_m2_medio:
-      Math.round(
-        mediaM2
-      ),
+      Math.round(avg),
 
     valor_venda_rapida:
-      Math.round(
-        vendaRapida
-      ),
+      Math.round(rapida),
 
     valor_mercado:
-      Math.round(
-        mercado
-      ),
+      Math.round(mercado),
 
     valor_maximo_sugerido:
-      Math.round(
-        valorMaximo
-      ),
+      Math.round(maximo),
 
-    valores_formatados: {
+    valores_formatados:{
+
       venda_rapida:
-        moeda(
-          vendaRapida
-        ),
+        moeda(rapida),
 
       mercado:
-        moeda(
-          mercado
-        ),
+        moeda(mercado),
 
       maximo_sugerido:
-        moeda(
-          valorMaximo
-        )
+        moeda(maximo)
     }
   };
 }
 
 app.get(
-  "/",
-  (req, res) => {
+  '/',
+  (req,res)=>
     res.json({
+
       status:
-        "AYRO ACM API online",
+        'AYRO ACM API online',
 
       versao:
-        "PRECISAO-V4",
+        'PRECISAO-V5',
 
       minimo_comparaveis:
         MIN_COMPARAVEIS
-    });
-  }
+    })
 );
 
 app.get(
   [
-    "/api/pesquisar",
-    "/api/search",
-    "/search"
+    '/api/pesquisar',
+    '/api/search',
+    '/search'
   ],
 
-  async (
-    req,
-    res
-  ) => {
-    try {
-      const q =
+  async(req,res)=>{
+
+    try{
+
+      const q=
         String(
-          req.query.q ||
-          ""
+          req.query.q||''
         ).trim();
 
-      if (!q) {
-        return res
-          .status(400)
-          .json({
-            erro:
-              "Informe uma pesquisa."
-          });
+      if(!q){
+
+        return res.status(400).json({
+
+          erro:
+            'Informe uma pesquisa.'
+        });
       }
 
-      const apiKey =
-        process.env
-          .SERPAPI_KEY;
+      const apiKey=
+        process.env.SERPAPI_KEY;
 
-      if (!apiKey) {
-        return res
-          .status(500)
-          .json({
-            erro:
-              "SERPAPI_KEY não configurada no servidor."
-          });
+      if(!apiKey){
+
+        return res.status(500).json({
+
+          erro:
+            'SERPAPI_KEY não configurada no servidor.'
+        });
       }
 
-      const busca =
+      const busca=
         dadosDaBusca(q);
 
-      let organic =
-        await buscarSerp(
-          apiKey,
-          q,
-          20
-        );
-
-      let resultados =
-        organic.map(
-          item =>
-            avaliarItem(
-              item,
-              busca
-            )
-        );
-
-      let unicos = [];
-
-      const vistos =
+      const vistos=
         new Set();
 
-      const adicionar =
-        lista => {
-          for (
-            const item
-            of lista
-          ) {
-            if (
-              !item.link
-            ) {
-              continue;
-            }
+      const unicos=[];
 
-            const chave =
-              normalizarLink(
-                item.link
+      const adicionar=
+        organic=>{
+
+          for(const raw of organic){
+
+            const x=
+              avaliarItem(
+                raw,
+                busca
               );
 
-            if (
-              vistos.has(
-                chave
-              )
-            ) {
+            if(!x.link){
               continue;
             }
 
-            vistos.add(
-              chave
-            );
+            const k=
+              normalizarLink(
+                x.link
+              );
 
-            unicos.push(
-              item
-            );
+            if(
+              vistos.has(k)
+            ){
+              continue;
+            }
+
+            vistos.add(k);
+
+            unicos.push(x);
           }
         };
 
-      adicionar(
-        resultados
-      );
+      /*
+        BUSCA 1:
+        consulta completa.
+      */
 
-      let comparaveis =
-        unicos.filter(
-          x =>
-            x.comparavel_valido
-        );
+      const baseQ=
+        `${q} imóvel anúncio R$ m² -youtube -instagram -facebook -tiktok`;
 
       /*
-       * Se a primeira busca
-       * não encontrar pelo menos
-       * 3 comparáveis, o AYRO
-       * faz uma segunda pesquisa.
-       */
+        BUSCA 2:
+        retira a área da consulta,
+        mas continua validando a área
+        depois.
+      */
 
-      if (
-        comparaveis.length <
-        MIN_COMPARAVEIS
-      ) {
-        const q2 =
-          q
-            .replace(
-              /\b\d+(?:[.,]\d+)?\s*m(?:²|2)\b/i,
-              ""
-            )
-            .replace(
-              /\s{2,}/g,
-              " "
-            )
-            .trim();
+      const semArea=
+        q
+          .replace(
+            /\b\d+(?:[.,]\d+)?\s*m(?:²|2)\b/i,
+            ''
+          )
+          .replace(
+            /\s{2,}/g,
+            ' '
+          )
+          .trim();
 
-        if (
-          q2 &&
-          q2 !== q
-        ) {
-          const organic2 =
-            await buscarSerp(
-              apiKey,
-              q2,
-              20
-            );
+      /*
+        BUSCA 3:
+        amplia ainda mais a descoberta,
+        retirando quartos da consulta.
 
-          adicionar(
-            organic2.map(
-              item =>
-                avaliarItem(
-                  item,
-                  busca
-                )
-            )
+        Depois o filtro continua
+        verificando divergências.
+      */
+
+      const semAreaQuartos=
+        semArea
+          .replace(
+            /\b\d+\s*(?:quartos?|dormitórios?|dormitorios?|dorms?|qtos?)\b/i,
+            ''
+          )
+          .replace(
+            /\s{2,}/g,
+            ' '
+          )
+          .trim();
+
+      const consultas=[
+
+        baseQ,
+
+        `${semArea} imóvel à venda preço R$ m² -youtube -instagram -facebook -tiktok`,
+
+        `${semAreaQuartos} imóvel à venda preço R$ m² -youtube -instagram -facebook -tiktok`
+      ];
+
+      let chamadas=0;
+
+      for(
+        const consulta of
+        [...new Set(consultas)]
+      ){
+
+        const encontrados=
+          await buscarSerp(
+            apiKey,
+            consulta,
+            20
           );
 
-          comparaveis =
-            unicos.filter(
-              x =>
-                x.comparavel_valido
-            );
+        adicionar(
+          encontrados
+        );
+
+        chamadas++;
+
+        const quantidadeValidos=
+          unicos.filter(
+            x=>x.comparavel_valido
+          ).length;
+
+        /*
+          Quando já houver uma amostra
+          boa, não precisa gastar outra
+          chamada da API.
+        */
+
+        if(
+          quantidadeValidos>=6
+        ){
+          break;
         }
       }
 
-      /*
-       * Ordena os imóveis
-       * mais semelhantes primeiro.
-       */
-
-      comparaveis =
-        comparaveis
+      let comparaveis=
+        unicos
+          .filter(
+            x=>x.comparavel_valido
+          )
           .sort(
-            (a, b) =>
-              b.score_similaridade -
+            (a,b)=>
+              b.score_similaridade-
               a.score_similaridade
           )
           .slice(
@@ -832,39 +860,37 @@ app.get(
             MAX_COMPARAVEIS
           );
 
-      const referencias =
+      const referencias=
         unicos
           .filter(
-            x =>
-              !x.comparavel_valido
+            x=>!x.comparavel_valido
           )
           .sort(
-            (a, b) =>
-              b.score_similaridade -
+            (a,b)=>
+              b.score_similaridade-
               a.score_similaridade
           );
 
-      /*
-       * Calcula o ACM.
-       */
-
-      const avaliacao =
+      const avaliacao=
         calcularAvaliacao(
           comparaveis,
           busca.area
         );
 
       res.json({
-        sucesso: true,
+
+        sucesso:true,
 
         versao:
-          "PRECISAO-V4",
+          'PRECISAO-V5',
 
-        consulta:
-          q,
+        consulta:q,
 
         criterios:
           busca,
+
+        chamadas_busca:
+          chamadas,
 
         total:
           unicos.length,
@@ -875,57 +901,45 @@ app.get(
         minimo_comparaveis:
           MIN_COMPARAVEIS,
 
-        comparaveis:
-          comparaveis,
+        comparaveis,
 
-        referencias:
-          referencias,
+        referencias,
 
-        avaliacao:
-          avaliacao,
+        avaliacao,
 
-        /*
-         * Mantido para
-         * compatibilidade
-         * com o index.html
-         * que já existe.
-         */
-
-        resultados: [
+        resultados:[
           ...comparaveis,
           ...referencias
         ]
       });
 
-    } catch (erro) {
+    }catch(e){
+
       console.error(
-        "ERRO AYRO:",
-        erro
+        'ERRO AYRO:',
+        e
       );
 
-      res
-        .status(500)
-        .json({
-          erro:
-            "Erro interno na pesquisa.",
+      res.status(500).json({
 
-          detalhe:
-            erro.message ||
-            String(erro)
-        });
+        erro:
+          'Erro interno na pesquisa.',
+
+        detalhe:
+          e.message||
+          String(e)
+      });
     }
   }
 );
 
-const PORT =
-  process.env.PORT ||
+const PORT=
+  process.env.PORT||
   3000;
 
 app.listen(
   PORT,
-  () => {
-    console.log(
-      `AYRO ACM API PRECISAO-V4 rodando na porta ${PORT}`
-    );
-  }
+  ()=>console.log(
+    `AYRO ACM API PRECISAO-V5 rodando na porta ${PORT}`
+  )
 );
