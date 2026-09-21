@@ -158,6 +158,15 @@ function initAyroSupabase(){
           <textarea id="pixCode" readonly style="width:100%;min-height:80px;margin-top:8px"></textarea>
           <button class="btn light full" type="button" onclick="copiarPix()">Copiar código Pix</button>
           <div id="pixStatus" class="muted" style="margin-top:8px">Aguardando pagamento...</div>
+          <div id="activateAccountBox" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #ead89b;text-align:left">
+            <div style="font-weight:900;color:#177245;margin-bottom:6px">✓ Pagamento aprovado</div>
+            <div class="muted" style="margin-bottom:10px">Crie agora sua senha de acesso ao AYRO ACM Pro.</div>
+            <label>Crie sua senha</label>
+            <input id="activatePassword" type="password" autocomplete="new-password" placeholder="Mínimo de 6 caracteres">
+            <label>Confirme sua senha</label>
+            <input id="activatePasswordConfirm" type="password" autocomplete="new-password" placeholder="Repita a senha">
+            <button id="activateAccountBtn" class="btn gold full" type="button" style="margin-top:12px" onclick="ativarContaPix()">Criar senha e entrar</button>
+          </div>
         </div>
         <div id="subscriptionStatus" class="subscription-status"></div>
       </div>
@@ -433,6 +442,8 @@ async function criarPix(){
     if(data.qr_code_base64){img.src=`data:image/png;base64,${data.qr_code_base64}`;img.style.display='block';}else img.style.display='none';
     box.style.display='block';status.textContent='Aguardando confirmação do pagamento...';
     setSubscriptionStatus('Pix gerado. Após a confirmação, o acesso de 30 dias será liberado automaticamente.','ok');
+    window.ayroCurrentPixPaymentId=String(data.payment_id||'');
+    window.ayroCurrentPixEmail=email;
     acompanharPix(data.payment_id,email);
   }catch(err){setSubscriptionStatus(err.message||'Erro ao gerar Pix.','err');}
   finally{btn.disabled=false;btn.textContent='⚡ Pix — R$ 49,90 / 30 dias';}
@@ -455,7 +466,9 @@ function acompanharPix(paymentId,email){
       if(st==='approved'){
         clearInterval(ayroPixTimer);ayroPixTimer=null;
         document.getElementById('pixStatus').textContent='Pagamento aprovado! Seu acesso foi liberado por 30 dias.';
-        setSubscriptionStatus('Pagamento Pix aprovado. Agora entre com seu e-mail e senha.','ok');
+        setSubscriptionStatus('Pagamento Pix aprovado. Crie sua senha abaixo para entrar no AYRO ACM Pro.','ok');
+        const activateBox=document.getElementById('activateAccountBox');
+        if(activateBox) activateBox.style.display='block';
       }else if(['rejected','cancelled','canceled','refunded','charged_back'].includes(st)){
         clearInterval(ayroPixTimer);ayroPixTimer=null;document.getElementById('pixStatus').textContent='Pagamento não aprovado. Gere um novo Pix.';
       }else document.getElementById('pixStatus').textContent='Aguardando pagamento...';
@@ -463,6 +476,48 @@ function acompanharPix(paymentId,email){
     if(tentativas>=120&&ayroPixTimer){clearInterval(ayroPixTimer);ayroPixTimer=null;}
   };
   verificar();ayroPixTimer=setInterval(verificar,5000);
+}
+
+
+async function ativarContaPix(){
+  const email=String(window.ayroCurrentPixEmail||document.getElementById('loginEmail').value||'').trim().toLowerCase();
+  const paymentId=String(window.ayroCurrentPixPaymentId||'').trim();
+  const password=document.getElementById('activatePassword').value;
+  const confirm=document.getElementById('activatePasswordConfirm').value;
+
+  if(!email){alert('E-mail não encontrado. Gere o Pix novamente com o seu e-mail.');return}
+  if(!paymentId){alert('Pagamento não identificado nesta tela. Atualize a página e use "Esqueci minha senha" se sua conta já foi criada.');return}
+  if(password.length<6){alert('A senha precisa ter pelo menos 6 caracteres.');return}
+  if(password!==confirm){alert('As duas senhas não são iguais.');return}
+
+  const btn=document.getElementById('activateAccountBtn');
+  const original=btn.textContent;
+  btn.disabled=true;
+  btn.textContent='Criando acesso...';
+
+  try{
+    const r=await fetch(`${AYRO_API_URL}/api/ativar-conta-pix`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password,payment_id:paymentId})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d?.erro||d?.detalhe||'Não foi possível criar o acesso.');
+
+    document.getElementById('loginEmail').value=email;
+    document.getElementById('loginPassword').value=password;
+    document.getElementById('activatePassword').value='';
+    document.getElementById('activatePasswordConfirm').value='';
+    document.getElementById('activateAccountBox').style.display='none';
+    setSubscriptionStatus('Conta ativada com sucesso. Entrando no AYRO ACM Pro...','ok');
+    await login();
+  }catch(err){
+    console.error(err);
+    alert(err.message||'Não foi possível criar sua senha.');
+  }finally{
+    btn.disabled=false;
+    btn.textContent=original;
+  }
 }
 
 async function login(){
