@@ -286,12 +286,7 @@ function quartosNoTexto(texto) {
   ];
 }
 
-function primeiroNumero(
-  texto,
-  re,
-  min = 0,
-  max = 999999
-) {
+function primeiroNumero(texto, re, min = 0, max = 999999) {
   const m = norm(texto).match(re);
 
   if (!m) return null;
@@ -420,8 +415,13 @@ function caminhar(obj, fn, depth = 0) {
 
   if (Array.isArray(obj)) {
     obj.forEach(
-      x => caminhar(x, fn, depth + 1)
+      x => caminhar(
+        x,
+        fn,
+        depth + 1
+      )
     );
+
     return;
   }
 
@@ -429,7 +429,11 @@ function caminhar(obj, fn, depth = 0) {
     fn(obj);
 
     Object.values(obj).forEach(
-      x => caminhar(x, fn, depth + 1)
+      x => caminhar(
+        x,
+        fn,
+        depth + 1
+      )
     );
   }
 }
@@ -457,48 +461,49 @@ function extrairDaPagina(html, busca) {
   };
 
   for (const root of extrairJsonLd(html)) {
-    caminhar(root, o => {
-      for (const [k, v] of Object.entries(o)) {
-        if (/^(price|lowPrice|highPrice)$/i.test(k)) {
-          const n = numeroBR(v);
+    caminhar(
+      root,
+      o => {
+        for (const [k, v] of Object.entries(o)) {
+          if (/^(price|lowPrice|highPrice)$/i.test(k)) {
+            const n = numeroBR(v);
 
-          if (Number.isFinite(n) && n >= 50000) {
-            structured.precos.push(n);
+            if (Number.isFinite(n) && n >= 50000) {
+              structured.precos.push(n);
+            }
           }
-        }
 
-        if (/floorSize|area|size/i.test(k)) {
-          const val =
-            typeof v === 'object'
-              ? (v.value || v.amount || '')
-              : v;
+          if (/floorSize|area|size/i.test(k)) {
+            const val =
+              typeof v === 'object'
+                ? (v.value || v.amount || '')
+                : v;
 
-          const n = numeroBR(val);
+            const n = numeroBR(val);
 
-          if (
-            Number.isFinite(n) &&
-            n >= 15 &&
-            n <= 100000
-          ) {
-            structured.areas.push(n);
+            if (
+              Number.isFinite(n) &&
+              n >= 15 &&
+              n <= 100000
+            ) {
+              structured.areas.push(n);
+            }
           }
-        }
 
-        if (
-          /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
-        ) {
-          const n = Number(v);
+          if (/numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)) {
+            const n = Number(v);
 
-          if (
-            Number.isFinite(n) &&
-            n > 0 &&
-            n < 30
-          ) {
-            structured.quartos.push(n);
+            if (
+              Number.isFinite(n) &&
+              n > 0 &&
+              n < 30
+            ) {
+              structured.quartos.push(n);
+            }
           }
         }
       }
-    });
+    );
   }
 
   const metaPrice = [
@@ -507,7 +512,11 @@ function extrairDaPagina(html, busca) {
     )
   ]
     .map(m => numeroBR(m[1]))
-    .filter(n => Number.isFinite(n) && n >= 50000);
+    .filter(
+      n =>
+        Number.isFinite(n) &&
+        n >= 50000
+    );
 
   const allPrecos = [
     ...new Set([
@@ -531,7 +540,8 @@ function extrairDaPagina(html, busca) {
     ])
   ];
 
-  const attrs = extrairAtributos(clean);
+  const attrs =
+    extrairAtributos(clean);
 
   return {
     preco: allPrecos[0] || null,
@@ -554,7 +564,8 @@ async function enriquecerPagina(item, busca) {
     return item;
   }
 
-  const ctrl = new AbortController();
+  const ctrl =
+    new AbortController();
 
   const timer =
     setTimeout(
@@ -594,7 +605,8 @@ async function enriquecerPagina(item, busca) {
       return item;
     }
 
-    const html = await r.text();
+    const html =
+      await r.text();
 
     const p =
       extrairDaPagina(
@@ -614,13 +626,23 @@ async function enriquecerPagina(item, busca) {
 }
 
 function avaliarItem(item, busca) {
-  const titulo = item.title || '';
-  const descricao = item.snippet || '';
-  const link = item.link || '';
-  const texto = `${titulo} ${descricao}`;
+  const titulo =
+    item.title || '';
 
-  const ud = dadosDaUrl(link);
-  const pg = item._pagina || {};
+  const descricao =
+    item.snippet || '';
+
+  const link =
+    item.link || '';
+
+  const texto =
+    `${titulo} ${descricao}`;
+
+  const ud =
+    dadosDaUrl(link);
+
+  const pg =
+    item._pagina || {};
 
   const full =
     `${texto} ${pg.texto || ''}`;
@@ -634,7 +656,8 @@ function avaliarItem(item, busca) {
     ...precosNoTexto(texto)
   ].filter(Number.isFinite);
 
-  const preco = precos[0] || null;
+  const preco =
+    precos[0] || null;
 
   const areas = [
     ud.area,
@@ -646,9 +669,7 @@ function avaliarItem(item, busca) {
     escolherArea(
       [...new Set(areas)],
       busca.area
-    );
-
-  const quartos = [
+    );  const quartos = [
     ud.quartos,
     ...(pg.quartos || []),
     ...quartosNoTexto(texto)
@@ -670,10 +691,16 @@ function avaliarItem(item, busca) {
       : attrs.condominio;
 
   const piscina =
-    Boolean(pg.piscina || attrs.piscina);
+    Boolean(
+      pg.piscina ||
+      attrs.piscina
+    );
 
   const sauna =
-    Boolean(pg.sauna || attrs.sauna);
+    Boolean(
+      pg.sauna ||
+      attrs.sauna
+    );
 
   const conservacao =
     pg.conservacao ||
@@ -683,18 +710,25 @@ function avaliarItem(item, busca) {
   const motivos = [];
 
   if (!ehLinkIndividual(link)) {
-    motivos.push('link não é anúncio individual');
+    motivos.push(
+      'link não é anúncio individual'
+    );
   }
 
   if (!Number.isFinite(preco)) {
-    motivos.push('sem preço identificado');
+    motivos.push(
+      'sem preço identificado'
+    );
   }
 
   if (!Number.isFinite(area)) {
-    motivos.push('sem área identificada');
+    motivos.push(
+      'sem área identificada'
+    );
   }
 
-  const nt = norm(full);
+  const nt =
+    norm(full);
 
   const temApto =
     /apartamento|\bapto\b|flat|studio/.test(nt);
@@ -710,18 +744,24 @@ function avaliarItem(item, busca) {
         : true;
 
   if (!tipoConfere) {
-    motivos.push('tipo de imóvel divergente');
+    motivos.push(
+      'tipo de imóvel divergente'
+    );
   }
 
   let diferencaArea = null;
 
   if (busca.area && area) {
     diferencaArea =
-      Math.abs(area - busca.area) /
+      Math.abs(
+        area - busca.area
+      ) /
       busca.area;
 
     if (diferencaArea > TOLERANCIA_AREA) {
-      motivos.push('área fora da faixa');
+      motivos.push(
+        'área fora da faixa'
+      );
     }
   }
 
@@ -731,14 +771,19 @@ function avaliarItem(item, busca) {
       : null;
 
   let score = 0;
+
   const detalhes = {};
 
   const bairroOk =
     busca.bairro
-      ? contemTermo(full, busca.bairro)
+      ? contemTermo(
+          full,
+          busca.bairro
+        )
       : null;
 
-  detalhes.bairro = bairroOk;
+  detalhes.bairro =
+    bairroOk;
 
   if (bairroOk) {
     score += 25;
@@ -769,7 +814,9 @@ function avaliarItem(item, busca) {
       );
 
     score += pts;
-    detalhes.area = Math.round(pts);
+
+    detalhes.area =
+      Math.round(pts);
   }
 
   let ptsQS = 0;
@@ -790,7 +837,9 @@ function avaliarItem(item, busca) {
   }
 
   score += ptsQS;
-  detalhes.quartos_suites = ptsQS;
+
+  detalhes.quartos_suites =
+    ptsQS;
 
   if (
     busca.conservacao &&
@@ -800,9 +849,12 @@ function avaliarItem(item, busca) {
     )
   ) {
     score += 8;
-    detalhes.conservacao = true;
+
+    detalhes.conservacao =
+      true;
   } else {
-    detalhes.conservacao = null;
+    detalhes.conservacao =
+      null;
   }
 
   if (
@@ -811,9 +863,12 @@ function avaliarItem(item, busca) {
     busca.vagas === vagas
   ) {
     score += 5;
-    detalhes.vagas = true;
+
+    detalhes.vagas =
+      true;
   } else {
-    detalhes.vagas = null;
+    detalhes.vagas =
+      null;
   }
 
   if (
@@ -830,7 +885,9 @@ function avaliarItem(item, busca) {
       );
 
     score += pts;
-    detalhes.condominio = Math.round(pts);
+
+    detalhes.condominio =
+      Math.round(pts);
   }
 
   let lazer = 0;
@@ -844,7 +901,9 @@ function avaliarItem(item, busca) {
   }
 
   score += lazer;
-  detalhes.piscina_sauna = lazer;
+
+  detalhes.piscina_sauna =
+    lazer;
 
   if (busca.diferenciais) {
     const termos =
@@ -875,13 +934,18 @@ function avaliarItem(item, busca) {
 
   if (precoM2) {
     score += 2;
-    detalhes.preco_m2 = 2;
+
+    detalhes.preco_m2 =
+      2;
   }
 
   score =
     Math.max(
       0,
-      Math.min(100, score)
+      Math.min(
+        100,
+        score
+      )
     );
 
   return {
@@ -904,19 +968,35 @@ function avaliarItem(item, busca) {
         ? `${String(area).replace('.', ',')} m²`
         : '',
 
-    preco_valor: preco,
-    area_valor: area,
-    preco_m2: precoM2,
+    preco_valor:
+      preco,
+
+    area_valor:
+      area,
+
+    preco_m2:
+      precoM2,
 
     quartos_identificados:
       quartos[0] ?? null,
 
-    suites_identificadas: suites,
-    vagas_identificadas: vagas,
-    condominio_identificado: condominio,
-    piscina_identificada: piscina,
-    sauna_identificada: sauna,
-    conservacao_identificada: conservacao,
+    suites_identificadas:
+      suites,
+
+    vagas_identificadas:
+      vagas,
+
+    condominio_identificado:
+      condominio,
+
+    piscina_identificada:
+      piscina,
+
+    sauna_identificada:
+      sauna,
+
+    conservacao_identificada:
+      conservacao,
 
     score_similaridade:
       Math.round(score),
@@ -935,6 +1015,7 @@ function avaliarItem(item, busca) {
         Boolean(item._pagina),
 
       diferencaArea,
+
       detalhes
     }
   };
@@ -957,7 +1038,8 @@ async function buscarSerp(apiKey, q, num = 20) {
         `https://serpapi.com/search.json?${params}`
       );
 
-    const d = await r.json();
+    const d =
+      await r.json();
 
     if (!r.ok) {
       return {
@@ -966,7 +1048,9 @@ async function buscarSerp(apiKey, q, num = 20) {
           d.error ||
           `HTTP ${r.status}`,
         fatal:
-          [401, 403, 429].includes(r.status)
+          [401, 403, 429].includes(
+            r.status
+          )
       };
     }
 
@@ -994,7 +1078,9 @@ async function buscarSerp(apiKey, q, num = 20) {
   } catch (e) {
     return {
       resultados: [],
-      erro: e.message || String(e),
+      erro:
+        e.message ||
+        String(e),
       fatal: false
     };
   }
@@ -1029,9 +1115,14 @@ function semOutliers(comps) {
       )
     ];
 
-  const iqr = q3 - q1;
-  const min = q1 - 1.5 * iqr;
-  const max = q3 + 1.5 * iqr;
+  const iqr =
+    q3 - q1;
+
+  const min =
+    q1 - 1.5 * iqr;
+
+  const max =
+    q3 + 1.5 * iqr;
 
   const f =
     comps.filter(
@@ -1062,11 +1153,15 @@ function calcularAvaliacao(comps, area) {
     };
   }
 
-  const base = semOutliers(comps);
+  const base =
+    semOutliers(comps);
 
   const valid =
     base.filter(
-      x => Number.isFinite(x.preco_m2)
+      x =>
+        Number.isFinite(
+          x.preco_m2
+        )
     );
 
   if (valid.length < MIN_COMPARAVEIS) {
@@ -1094,7 +1189,10 @@ function calcularAvaliacao(comps, area) {
     usados.reduce(
       (s, x) =>
         s +
-        Math.max(1, x.score_similaridade),
+        Math.max(
+          1,
+          x.score_similaridade
+        ),
       0
     );
 
@@ -1113,12 +1211,16 @@ function calcularAvaliacao(comps, area) {
 
   const med =
     mediana(
-      usados.map(x => x.preco_m2)
+      usados.map(
+        x => x.preco_m2
+      )
     );
 
   const avg =
     media(
-      usados.map(x => x.preco_m2)
+      usados.map(
+        x => x.preco_m2
+      )
     );
 
   const referencia =
@@ -1191,7 +1293,8 @@ function calcularAvaliacao(comps, area) {
 }
 
 function cacheGet(key) {
-  const x = searchCache.get(key);
+  const x =
+    searchCache.get(key);
 
   if (!x) {
     return null;
@@ -1208,7 +1311,9 @@ function cacheGet(key) {
   return x.data;
 }
 
-function cacheSet(key, data) {
+function cacheSet(  key,
+  data
+) {
   if (searchCache.size >= CACHE_MAX) {
     const first =
       searchCache
@@ -1312,8 +1417,11 @@ app.get(
         });
       }
 
-      const vistos = new Set();
-      const candidatos = [];
+      const vistos =
+        new Set();
+
+      const candidatos =
+        [];
 
       const semArea =
         q
@@ -1339,7 +1447,8 @@ app.get(
         `${semArea} imóvel venda R$ m²`
       ];
 
-      const erros_busca = [];
+      const erros_busca =
+        [];
 
       const adicionar =
         (lista = []) => {
@@ -1349,13 +1458,16 @@ app.get(
             }
 
             const k =
-              normalizarLink(raw.link);
+              normalizarLink(
+                raw.link
+              );
 
             if (vistos.has(k)) {
               continue;
             }
 
             vistos.add(k);
+
             candidatos.push(raw);
           }
         };
@@ -1386,12 +1498,16 @@ app.get(
                 });
               }
 
-              adicionar(t.resultados);
+              adicionar(
+                t.resultados
+              );
             }
           );
 
           const fatal =
-            lotes.find(t => t.fatal);
+            lotes.find(
+              t => t.fatal
+            );
 
           if (
             fatal &&
@@ -1407,7 +1523,10 @@ app.get(
 
       if (
         candidatos.filter(
-          x => ehLinkIndividual(x.link)
+          x =>
+            ehLinkIndividual(
+              x.link
+            )
         ).length < 8
       ) {
         await rodar(fallback);
@@ -1416,11 +1535,15 @@ app.get(
       const individuais =
         candidatos
           .filter(
-            x => ehLinkIndividual(x.link)
+            x =>
+              ehLinkIndividual(
+                x.link
+              )
           )
           .slice(0, 12);
 
-      const enriquecidos = [];
+      const enriquecidos =
+        [];
 
       for (
         let i = 0;
@@ -1428,7 +1551,10 @@ app.get(
         i += 6
       ) {
         const lote =
-          individuais.slice(i, i + 6);
+          individuais.slice(
+            i,
+            i + 6
+          );
 
         enriquecidos.push(
           ...await Promise.all(
@@ -1452,7 +1578,8 @@ app.get(
                 )
             )
             .filter(
-              x => x.comparavel_valido
+              x =>
+                x.comparavel_valido
             ).length >= 6
         ) {
           break;
@@ -1461,41 +1588,60 @@ app.get(
 
       const processados = [
         ...enriquecidos.map(
-          x => avaliarItem(x, busca)
+          x =>
+            avaliarItem(
+              x,
+              busca
+            )
         ),
 
         ...candidatos
           .filter(
-            x => !ehLinkIndividual(x.link)
+            x =>
+              !ehLinkIndividual(
+                x.link
+              )
           )
           .map(
-            x => avaliarItem(x, busca)
+            x =>
+              avaliarItem(
+                x,
+                busca
+              )
           )
       ];
 
       const comparaveis =
         processados
           .filter(
-            x => x.comparavel_valido
+            x =>
+              x.comparavel_valido
           )
           .sort(
             (a, b) =>
               b.score_similaridade -
               a.score_similaridade
           )
-          .slice(0, MAX_COMPARAVEIS);
+          .slice(
+            0,
+            MAX_COMPARAVEIS
+          );
 
       const referencias =
         processados
           .filter(
-            x => !x.comparavel_valido
+            x =>
+              !x.comparavel_valido
           )
           .sort(
             (a, b) =>
               b.score_similaridade -
               a.score_similaridade
           )
-          .slice(0, 30);
+          .slice(
+            0,
+            30
+          );
 
       const avaliacao =
         calcularAvaliacao(
@@ -1509,8 +1655,11 @@ app.get(
         versao:
           'PRECISAO-V12-MP',
 
-        consulta: q,
-        criterios: busca,
+        consulta:
+          q,
+
+        criterios:
+          busca,
 
         total:
           processados.length,
@@ -1522,8 +1671,11 @@ app.get(
           MIN_COMPARAVEIS,
 
         comparaveis,
+
         referencias,
+
         avaliacao,
+
         erros_busca,
 
         resultados: [
@@ -1540,7 +1692,7 @@ app.get(
       res.json(payload);
     } catch (e) {
       console.error(
-        'ERRO AYRO V12:',
+        'ERRO AYRO V11:',
         e
       );
 
@@ -1561,30 +1713,172 @@ app.get(
   }
 );
 
+
 /* ==========================================
-   MERCADO PAGO
-   ASSINATURA AYRO ACM PRO
-   R$ 49,90 / MÊS
+   AYRO ACM PRO - PAGAMENTOS + SUPABASE
+   Mercado Pago: assinatura mensal e webhook
 ========================================== */
+
+const crypto = require('crypto');
+
+const mpAccessToken = () => process.env.MP_ACCESS_TOKEN || '';
+const supabaseUrl = () => String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const supabaseSecret = () => process.env.SUPABASE_SECRET_KEY || '';
+
+async function mpRequest(path, options = {}) {
+  const token = mpAccessToken();
+  if (!token) throw new Error('MP_ACCESS_TOKEN não configurado no servidor.');
+
+  const resposta = await fetch(`https://api.mercadopago.com${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+
+  const dados = await resposta.json().catch(() => ({}));
+
+  if (!resposta.ok) {
+    const erro = new Error(`Mercado Pago HTTP ${resposta.status}`);
+    erro.dados = dados;
+    throw erro;
+  }
+
+  return dados;
+}
+
+async function mpGet(path) {
+  return mpRequest(path, { method: 'GET' });
+}
+
+async function supabaseRequest(path, options = {}) {
+  const url = supabaseUrl();
+  const secret = supabaseSecret();
+
+  if (!url || !secret) {
+    throw new Error('Supabase não configurado no servidor.');
+  }
+
+  const resposta = await fetch(`${url}${path}`, {
+    ...options,
+    headers: {
+      apikey: secret,
+      Authorization: `Bearer ${secret}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+      ...(options.headers || {})
+    }
+  });
+
+  const texto = await resposta.text();
+
+  let dados = null;
+
+  try {
+    dados = texto ? JSON.parse(texto) : null;
+  } catch {
+    dados = texto;
+  }
+
+  if (!resposta.ok) {
+    const erro = new Error(`Supabase HTTP ${resposta.status}`);
+    erro.dados = dados;
+    throw erro;
+  }
+
+  return dados;
+}
+
+async function buscarAssinaturaPorReferencia(externalReference) {
+  if (!externalReference) return null;
+
+  const rows = await supabaseRequest(
+    `/rest/v1/ayro_assinaturas?external_reference=eq.${encodeURIComponent(externalReference)}&select=*`,
+    { method: 'GET' }
+  );
+
+  return Array.isArray(rows) && rows.length
+    ? rows[0]
+    : null;
+}
+
+async function buscarAssinaturaPorSubscriptionId(subscriptionId) {
+  if (!subscriptionId) return null;
+
+  const rows = await supabaseRequest(
+    `/rest/v1/ayro_assinaturas?mercado_pago_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=*`,
+    { method: 'GET' }
+  );
+
+  return Array.isArray(rows) && rows.length
+    ? rows[0]
+    : null;
+}
+
+async function atualizarAssinatura(id, patch) {
+  if (!id) return null;
+
+  const rows = await supabaseRequest(
+    `/rest/v1/ayro_assinaturas?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...patch,
+        updated_at: new Date().toISOString()
+      })
+    }
+  );
+
+  return Array.isArray(rows) && rows.length
+    ? rows[0]
+    : null;
+}
+
+async function atualizarProfile(userId, status, acessoFim) {
+  if (!userId) return null;
+
+  const patch = {
+    subscription_status: status
+  };
+
+  if (acessoFim !== undefined) {
+    patch.subscription_end = acessoFim;
+  }
+
+  const rows = await supabaseRequest(
+    `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(patch)
+    }
+  );
+
+  return Array.isArray(rows) && rows.length
+    ? rows[0]
+    : null;
+}
+
+function adicionarDias(dataBase, dias) {
+  const d =
+    new Date(dataBase || Date.now());
+
+  d.setUTCDate(
+    d.getUTCDate() + dias
+  );
+
+  return d.toISOString();
+}
 
 app.post(
   '/api/mercadopago/criar-assinatura',
-
   async (req, res) => {
     try {
-      const accessToken =
-        process.env.MP_ACCESS_TOKEN;
-
-      if (!accessToken) {
-        return res
-          .status(500)
-          .json({
-            erro:
-              'MP_ACCESS_TOKEN não configurado no servidor.'
-          });
-      }
-
-      const { email } = req.body || {};
+      const {
+        email,
+        user_id
+      } = req.body || {};
 
       if (!email) {
         return res
@@ -1595,150 +1889,159 @@ app.post(
           });
       }
 
-      const baseUrl =
-        'https://ayro-acm.onrender.com';
+      const externalReference =
+        `AYRO-${crypto.randomUUID()}`;
 
-      const assinatura = {
-        reason:
-          'AYRO ACM Pro',
+      const agora =
+        new Date().toISOString();
 
-        external_reference:
-          `AYRO-${Date.now()}`,
-
-        payer_email:
-          email,
-
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: 'months',
-          transaction_amount: 49.90,
-          currency_id: 'BRL'
-        },
-
-        back_url:
-          baseUrl,
-
-        status:
-          'pending'
-      };
-
-      const resposta =
-        await fetch(
-          'https://api.mercadopago.com/preapproval',
+      const criadas =
+        await supabaseRequest(
+          '/rest/v1/ayro_assinaturas',
           {
             method: 'POST',
 
-            headers: {
-              Authorization:
-                `Bearer ${accessToken}`,
+            body: JSON.stringify({
+              user_id:
+                user_id || null,
 
-              'Content-Type':
-                'application/json'
-            },
+              email,
 
-            body:
-              JSON.stringify(assinatura)
+              plano:
+                'AYRO ACM Pro',
+
+              status:
+                'pending',
+
+              metodo_pagamento:
+                'cartao_assinatura',
+
+              external_reference:
+                externalReference,
+
+              valor:
+                49.90,
+
+              acesso_inicio:
+                null,
+
+              acesso_fim:
+                null,
+
+              proximo_pagamento:
+                null,
+
+              created_at:
+                agora,
+
+              updated_at:
+                agora
+            })
           }
         );
 
-      const dados =
-        await resposta.json();
+      const assinatura =
+        await mpRequest(
+          '/preapproval',
+          {
+            method: 'POST',
 
-      if (!resposta.ok) {
-        console.error(
-          'Erro Mercado Pago:',
-          dados
+            body: JSON.stringify({
+              reason:
+                'AYRO ACM Pro',
+
+              external_reference:
+                externalReference,
+
+              payer_email:
+                email,
+
+              auto_recurring: {
+                frequency: 1,
+
+                frequency_type:
+                  'months',
+
+                transaction_amount:
+                  49.90,
+
+                currency_id:
+                  'BRL'
+              },
+
+              back_url:
+                'https://ayro-acm-api-prod.onrender.com',
+
+              status:
+                'pending'
+            })
+          }
         );
 
-        return res
-          .status(resposta.status)
-          .json({
-            erro:
-              'Não foi possível criar a assinatura.',
+      const registro =
+        Array.isArray(criadas) &&
+        criadas.length
+          ? criadas[0]
+          : null;
 
-            detalhes:
-              dados
-          });
+      if (registro?.id) {
+        await atualizarAssinatura(
+          registro.id,
+          {
+            mercado_pago_subscription_id:
+              String(
+                assinatura.id || ''
+              ),
+
+            status:
+              assinatura.status ||
+              'pending',
+
+            proximo_pagamento:
+              assinatura.next_payment_date ||
+              null
+          }
+        );
       }
 
       return res.json({
         sucesso: true,
 
         assinatura_id:
-          dados.id,
+          assinatura.id,
 
         status:
-          dados.status,
+          assinatura.status,
 
         checkout_url:
-          dados.init_point
+          assinatura.init_point,
+
+        external_reference:
+          externalReference
       });
     } catch (erro) {
       console.error(
         'Erro ao criar assinatura Mercado Pago:',
-        erro
+        erro.dados || erro
       );
 
       return res
         .status(500)
         .json({
           erro:
-            'Erro interno ao criar assinatura.'
+            'Erro interno ao criar assinatura.',
+
+          detalhe:
+            erro.dados ||
+            erro.message ||
+            String(erro)
         });
     }
   }
 );
 
-/* ==========================================
-   MERCADO PAGO - AYRO ACM PRO V12
-   Consulta de assinatura + webhook
-========================================== */
-
-const mpAccessToken =
-  () =>
-    process.env.MP_ACCESS_TOKEN || '';
-
-async function mpGet(path) {
-  const token = mpAccessToken();
-
-  if (!token) {
-    throw new Error(
-      'MP_ACCESS_TOKEN não configurado no servidor.'
-    );
-  }
-
-  const resposta =
-    await fetch(
-      `https://api.mercadopago.com${path}`,
-      {
-        headers: {
-          Authorization:
-            `Bearer ${token}`
-        }
-      }
-    );
-
-  const dados =
-    await resposta
-      .json()
-      .catch(() => ({}));
-
-  if (!resposta.ok) {
-    const erro =
-      new Error(
-        `Mercado Pago HTTP ${resposta.status}`
-      );
-
-    erro.dados = dados;
-    throw erro;
-  }
-
-  return dados;
-}
-
 app.get(
   '/api/mercadopago/assinatura/:id',
-
   async (req, res) => {
     try {
       const id =
@@ -1765,10 +2068,8 @@ app.get(
         id: dados.id,
         status: dados.status,
         payer_email: dados.payer_email,
-        external_reference:
-          dados.external_reference,
-        next_payment_date:
-          dados.next_payment_date || null
+        external_reference: dados.external_reference,
+        next_payment_date: dados.next_payment_date || null
       });
     } catch (erro) {
       console.error(
@@ -1786,14 +2087,240 @@ app.get(
   }
 );
 
+async function processarPreapproval(dataId) {
+  const assinatura =
+    await mpGet(
+      `/preapproval/${encodeURIComponent(dataId)}`
+    );
+
+  let registro =
+    await buscarAssinaturaPorReferencia(
+      assinatura.external_reference
+    );
+
+  if (!registro) {
+    registro =
+      await buscarAssinaturaPorSubscriptionId(
+        assinatura.id
+      );
+  }
+
+  if (!registro) {
+    console.log(
+      'Assinatura MP sem registro correspondente no Supabase:',
+      assinatura.id
+    );
+
+    return;
+  }
+
+  const ativa =
+    ['authorized', 'active'].includes(
+      String(
+        assinatura.status || ''
+      ).toLowerCase()
+    );
+
+  const encerrada =
+    [
+      'cancelled',
+      'canceled',
+      'paused'
+    ].includes(
+      String(
+        assinatura.status || ''
+      ).toLowerCase()
+    );
+
+  const acessoInicio =
+    ativa
+      ? (
+          registro.acesso_inicio ||
+          new Date().toISOString()
+        )
+      : registro.acesso_inicio;
+
+  const acessoFim =
+    ativa
+      ? (
+          assinatura.next_payment_date ||
+          registro.acesso_fim ||
+          null
+        )
+      : registro.acesso_fim;
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        assinatura.status ||
+        registro.status,
+
+      metodo_pagamento:
+        'cartao_assinatura',
+
+      mercado_pago_subscription_id:
+        String(
+          assinatura.id || ''
+        ),
+
+      acesso_inicio:
+        acessoInicio || null,
+
+      acesso_fim:
+        acessoFim || null,
+
+      proximo_pagamento:
+        assinatura.next_payment_date ||
+        null
+    }
+  );
+
+  if (registro.user_id) {
+    if (ativa) {
+      await atualizarProfile(
+        registro.user_id,
+        'active',
+        acessoFim || null
+      );
+    }
+
+    if (encerrada) {
+      await atualizarProfile(
+        registro.user_id,
+        'inactive',
+        acessoFim || null
+      );
+    }
+  }
+}
+
+async function processarPagamento(dataId) {
+  const pagamento =
+    await mpGet(
+      `/v1/payments/${encodeURIComponent(dataId)}`
+    );
+
+  const ref =
+    pagamento.external_reference;
+
+  if (!ref) return;
+
+  const registro =
+    await buscarAssinaturaPorReferencia(
+      ref
+    );
+
+  if (!registro) {
+    console.log(
+      'Pagamento MP sem registro correspondente no Supabase:',
+      pagamento.id
+    );
+
+    return;
+  }
+
+  const status =
+    String(
+      pagamento.status || ''
+    ).toLowerCase();
+
+  const metodo =
+    String(
+      pagamento.payment_method_id || ''
+    ).toLowerCase();
+
+  if (
+    status === 'approved' &&
+    metodo === 'pix'
+  ) {
+    const agora =
+      new Date();
+
+    const fimAtual =
+      registro.acesso_fim
+        ? new Date(
+            registro.acesso_fim
+          )
+        : null;
+
+    const base =
+      fimAtual &&
+      fimAtual > agora
+        ? fimAtual
+        : agora;
+
+    const acessoFim =
+      adicionarDias(
+        base,
+        30
+      );
+
+    await atualizarAssinatura(
+      registro.id,
+      {
+        status:
+          'active',
+
+        metodo_pagamento:
+          'pix',
+
+        mercado_pago_payment_id:
+          String(
+            pagamento.id || ''
+          ),
+
+        acesso_inicio:
+          registro.acesso_inicio ||
+          agora.toISOString(),
+
+        acesso_fim:
+          acessoFim,
+
+        proximo_pagamento:
+          null
+      }
+    );
+
+    if (registro.user_id) {
+      await atualizarProfile(
+        registro.user_id,
+        'active',
+        acessoFim
+      );
+    }
+
+    return;
+  }
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        pagamento.status ||
+        registro.status,
+
+      mercado_pago_payment_id:
+        String(
+          pagamento.id || ''
+        ),
+
+      metodo_pagamento:
+        metodo ||
+        registro.metodo_pagamento ||
+        null
+    }
+  );
+}
+
 app.post(
   '/api/mercadopago/webhook',
-
   async (req, res) => {
     res.sendStatus(200);
 
     try {
-      const body = req.body || {};
+      const body =
+        req.body || {};
 
       const tipo =
         String(
@@ -1814,62 +2341,26 @@ app.post(
           'Webhook Mercado Pago recebido sem data.id:',
           body
         );
+
         return;
       }
 
       if (
-        tipo === 'subscription_preapproval' ||
-        tipo === 'preapproval'
+        tipo ===
+          'subscription_preapproval' ||
+        tipo ===
+          'preapproval'
       ) {
-        const assinatura =
-          await mpGet(
-            `/preapproval/${encodeURIComponent(dataId)}`
-          );
-
-        console.log(
-          'MP assinatura atualizada:',
-          {
-            id:
-              assinatura.id,
-
-            status:
-              assinatura.status,
-
-            payer_email:
-              assinatura.payer_email,
-
-            external_reference:
-              assinatura.external_reference
-          }
+        await processarPreapproval(
+          dataId
         );
 
         return;
       }
 
       if (tipo === 'payment') {
-        const pagamento =
-          await mpGet(
-            `/v1/payments/${encodeURIComponent(dataId)}`
-          );
-
-        console.log(
-          'MP pagamento atualizado:',
-          {
-            id:
-              pagamento.id,
-
-            status:
-              pagamento.status,
-
-            external_reference:
-              pagamento.external_reference,
-
-            transaction_amount:
-              pagamento.transaction_amount,
-
-            payment_method_id:
-              pagamento.payment_method_id
-          }
+        await processarPagamento(
+          dataId
         );
 
         return;
@@ -1884,19 +2375,13 @@ app.post(
             `/authorized_payments/${encodeURIComponent(dataId)}`
           );
 
-        console.log(
-          'MP fatura de assinatura atualizada:',
-          {
-            id:
-              fatura.id,
-
-            status:
-              fatura.status,
-
-            preapproval_id:
-              fatura.preapproval_id
-          }
-        );
+        if (
+          fatura.preapproval_id
+        ) {
+          await processarPreapproval(
+            fatura.preapproval_id
+          );
+        }
 
         return;
       }
@@ -1916,9 +2401,12 @@ app.post(
 );
 
 const PORT =
-  process.env.PORT || 3000;
+  process.env.PORT ||
+  3000;
 
-if (require.main === module) {
+if (
+  require.main === module
+) {
   app.listen(
     PORT,
     () =>
