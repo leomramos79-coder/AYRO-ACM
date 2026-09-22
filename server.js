@@ -484,7 +484,9 @@ function caminhar(
       )
     );
   }
-}function extrairDaPagina(html, busca) {
+}
+
+function extrairDaPagina(html, busca) {
   const clean =
     String(html || '')
       .replace(
@@ -615,7 +617,8 @@ function caminhar(
     );
 
   const allPrecos = [
-    ...new Set([      ...structured.precos,
+    ...new Set([
+      ...structured.precos,
       ...metaPrice,
       ...precos
     ])
@@ -696,9 +699,7 @@ async function enriquecerPagina(
               'text/html,application/xhtml+xml'
           }
         }
-      );
-
-    if (!r.ok) {
+      );    if (!r.ok) {
       return item;
     }
 
@@ -1137,11 +1138,10 @@ function avaliarItem(
     diferenca_area:
       diferencaArea
   };
-}
-
-function removerOutliers(
+}function removerOutliers(
   comparaveis
-) {  if (
+) {
+  if (
     !Array.isArray(comparaveis) ||
     comparaveis.length < 5
   ) {
@@ -1231,7 +1231,9 @@ function calcularAvaliacao(
     MIN_COMPARAVEIS
   ) {
     return {
-      disponivel: false,      motivo:
+      disponivel: false,
+
+      motivo:
         'Não há comparáveis suficientes após a validação estatística.',
 
       quantidade:
@@ -1785,7 +1787,9 @@ app.get(
                 busca
               )
           )
-      ];      const comparaveis =
+      ];
+
+      const comparaveis =
         processados
           .filter(
             x =>
@@ -1848,7 +1852,9 @@ app.get(
 
         referencias,
 
-        avaliacao,        erros_busca:
+        avaliacao,
+
+        erros_busca:
           errosBusca,
 
         resultados: [
@@ -1887,9 +1893,7 @@ app.get(
         });
     }
   }
-);
-
-/* ==========================================
+);/* ==========================================
    AYRO ACM PRO
    MERCADO PAGO + SUPABASE
 ========================================== */
@@ -1929,7 +1933,10 @@ console.log(
       !!process.env.MP_ACCESS_TOKEN,
 
     MP_WEBHOOK_SECRET:
-      !!process.env.MP_WEBHOOK_SECRET
+      !!process.env.MP_WEBHOOK_SECRET,
+
+    RESEND_API_KEY:
+      !!process.env.RESEND_API_KEY
   }
 );
 
@@ -2005,7 +2012,6 @@ async function supabaseRequest(
   const secret =
     supabaseSecret();
 
-  /* Diagnóstico adicional dentro da conexão */
   console.log(
     'SUPABASE REQUEST CHECK:',
     {
@@ -2228,12 +2234,7 @@ async function criarOuAtualizarUsuarioAuth(
           JSON.stringify({
             email,
             password,
-            email_confirm: true,
-
-            user_metadata: {
-              app:
-                'AYRO ACM Pro'
-            }
+            email_confirm: true
           })
       }
     );
@@ -2245,40 +2246,446 @@ async function criarOuAtualizarUsuarioAuth(
 }
 
 async function garantirUsuarioAuthParaEmail(email) {
-  const existente = await buscarUsuarioAuthPorEmail(email);
-  if (existente?.id) return existente;
+  const existente =
+    await buscarUsuarioAuthPorEmail(email);
 
-  const senhaTemporaria = crypto.randomBytes(32).toString('hex') + 'Aa1!';
-  const criado = await supabaseAuthRequest('/auth/v1/admin/users', {
-    method: 'POST',
-    body: JSON.stringify({
-      email,
-      password: senhaTemporaria,
-      email_confirm: true,
-      user_metadata: { app: 'AYRO ACM Pro' }
-    })
-  });
+  if (existente?.id) {
+    return existente;
+  }
+
+  const senhaTemporaria =
+    crypto.randomBytes(32).toString('hex') +
+    'Aa1!';
+
+  const criado =
+    await supabaseAuthRequest(
+      '/auth/v1/admin/users',
+      {
+        method: 'POST',
+
+        body:
+          JSON.stringify({
+            email,
+            password:
+              senhaTemporaria,
+            email_confirm:
+              true,
+            user_metadata: {
+              app:
+                'AYRO ACM Pro'
+            }
+          })
+      }
+    );
 
   return criado?.user || criado;
 }
 
 function ayroAppUrl() {
-  return String(process.env.APP_URL || 'https://ayro-acm.onrender.com').replace(/\/$/, '');
+  return String(
+    process.env.APP_URL ||
+    'https://ayro-acm.onrender.com'
+  ).replace(/\/$/, '');
+}/* ==========================================
+   RESEND - E-MAIL AYRO ACM PRO
+========================================== */
+
+const resendApiKey =
+  () =>
+    process.env.RESEND_API_KEY ||
+    '';
+
+async function enviarEmailResend({
+  para,
+  assunto,
+  html
+}) {
+  const apiKey =
+    resendApiKey();
+
+  if (!apiKey) {
+    throw new Error(
+      'RESEND_API_KEY não configurada no Render.'
+    );
+  }
+
+  const resposta =
+    await fetch(
+      'https://api.resend.com/emails',
+      {
+        method: 'POST',
+
+        headers: {
+          Authorization:
+            `Bearer ${apiKey}`,
+
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            from:
+              'AYRO ACM Pro <acesso@ayroimoveis.com.br>',
+
+            to: [para],
+
+            subject:
+              assunto,
+
+            html
+          })
+      }
+    );
+
+  const dados =
+    await resposta
+      .json()
+      .catch(() => ({}));
+
+  if (!resposta.ok) {
+    const erro =
+      new Error(
+        `Resend HTTP ${resposta.status}`
+      );
+
+    erro.dados =
+      dados;
+
+    throw erro;
+  }
+
+  return dados;
 }
 
-async function enviarEmailCriarSenha(email) {
-  const redirectTo = ayroAppUrl();
-  await supabaseAuthRequest(
-    `/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,
+/* ==========================================
+   GERAR LINK SEGURO PARA CRIAR SENHA
+========================================== */
+
+async function gerarLinkCriarSenha(
+  email
+) {
+  const url =
+    supabaseUrl();
+
+  const secret =
+    supabaseSecret();
+
+  if (!url || !secret) {
+    throw new Error(
+      'Supabase não configurado.'
+    );
+  }
+
+  const redirectTo =
+    ayroAppUrl();
+
+  const resposta =
+    await fetch(
+      `${url}/auth/v1/admin/generate_link`,
+      {
+        method: 'POST',
+
+        headers: {
+          apikey:
+            secret,
+
+          Authorization:
+            `Bearer ${secret}`,
+
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            type:
+              'recovery',
+
+            email,
+
+            options: {
+              redirectTo
+            }
+          })
+      }
+    );
+
+  const dados =
+    await resposta
+      .json()
+      .catch(() => ({}));
+
+  if (!resposta.ok) {
+    const erro =
+      new Error(
+        `Supabase generate_link HTTP ${resposta.status}`
+      );
+
+    erro.dados =
+      dados;
+
+    throw erro;
+  }
+
+  const link =
+    dados?.properties?.action_link ||
+    dados?.action_link ||
+    '';
+
+  if (!link) {
+    throw new Error(
+      'Supabase não retornou o link para criação da senha.'
+    );
+  }
+
+  return link;
+}
+
+/* ==========================================
+   E-MAIL: PAGAMENTO APROVADO
+========================================== */
+
+async function enviarEmailCriarSenha(
+  email
+) {
+  const emailCliente =
+    String(email || '')
+      .trim()
+      .toLowerCase();
+
+  if (!emailCliente) {
+    throw new Error(
+      'E-mail do cliente não informado.'
+    );
+  }
+
+  const linkCriarSenha =
+    await gerarLinkCriarSenha(
+      emailCliente
+    );
+
+  const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+  <title>AYRO ACM Pro</title>
+</head>
+
+<body
+  style="
+    margin:0;
+    padding:0;
+    background:#f4f5f7;
+    font-family:Arial,Helvetica,sans-serif;
+    color:#1f2937;
+  "
+>
+  <table
+    width="100%"
+    cellpadding="0"
+    cellspacing="0"
+    border="0"
+    style="background:#f4f5f7;padding:30px 15px;"
+  >
+    <tr>
+      <td align="center">
+
+        <table
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="
+            max-width:600px;
+            background:#ffffff;
+            border-radius:14px;
+            overflow:hidden;
+            box-shadow:0 4px 18px rgba(0,0,0,0.08);
+          "
+        >
+
+          <tr>
+            <td
+              align="center"
+              style="
+                background:#111827;
+                padding:30px 20px;
+                color:#ffffff;
+              "
+            >
+              <div
+                style="
+                  font-size:28px;
+                  font-weight:700;
+                  letter-spacing:1px;
+                "
+              >
+                AYRO ACM Pro
+              </div>
+
+              <div
+                style="
+                  font-size:14px;
+                  margin-top:7px;
+                  color:#d1d5db;
+                "
+              >
+                Avaliação Comercial de Mercado
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td
+              style="
+                padding:35px 35px 15px 35px;
+              "
+            >
+
+              <div
+                style="
+                  font-size:23px;
+                  font-weight:700;
+                  color:#111827;
+                  margin-bottom:18px;
+                "
+              >
+                Pagamento aprovado!
+              </div>
+
+              <div
+                style="
+                  font-size:16px;
+                  line-height:1.7;
+                  color:#4b5563;
+                "
+              >
+                Recebemos a confirmação do seu pagamento
+                do <strong>AYRO ACM Pro</strong>.
+              </div>
+
+              <div
+                style="
+                  font-size:16px;
+                  line-height:1.7;
+                  color:#4b5563;
+                  margin-top:12px;
+                "
+              >
+                Seu acesso foi liberado.
+                Agora falta apenas criar sua senha.
+              </div>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td
+              align="center"
+              style="
+                padding:20px 35px 30px 35px;
+              "
+            >
+
+              <a
+                href="${linkCriarSenha}"
+                style="
+                  display:inline-block;
+                  background:#111827;
+                  color:#ffffff;
+                  text-decoration:none;
+                  font-size:16px;
+                  font-weight:700;
+                  padding:16px 32px;
+                  border-radius:8px;
+                "
+              >
+                Criar minha senha
+              </a>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td
+              style="
+                padding:0 35px 30px 35px;
+              "
+            >
+
+              <div
+                style="
+                  background:#f9fafb;
+                  border-radius:8px;
+                  padding:18px;
+                  font-size:14px;
+                  line-height:1.6;
+                  color:#6b7280;
+                "
+              >
+                Após criar sua senha, você poderá acessar
+                normalmente o AYRO ACM Pro utilizando seu
+                e-mail e a senha cadastrada.
+              </div>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td
+              style="
+                border-top:1px solid #e5e7eb;
+                padding:22px 35px;
+                text-align:center;
+                font-size:12px;
+                color:#9ca3af;
+              "
+            >
+              AYRO ACM Pro<br>
+              ayroimoveis.com.br
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  const resultado =
+    await enviarEmailResend({
+      para:
+        emailCliente,
+
+      assunto:
+        'Pagamento aprovado — crie sua senha | AYRO ACM Pro',
+
+      html
+    });
+
+  console.log(
+    'E-mail AYRO enviado pelo Resend:',
     {
-      method: 'POST',
-      body: JSON.stringify({ email })
+      email:
+        emailCliente,
+
+      id:
+        resultado?.id ||
+        null
     }
   );
-  console.log('E-mail de criação de senha solicitado:', email);
-}
 
-async function garantirProfileAtivo(
+  return resultado;
+}async function garantirProfileAtivo(
   userId,
   email,
   acessoFim
@@ -2464,7 +2871,8 @@ async function atualizarProfile(
   );
 }
 
-function adicionarDias(  dataBase,
+function adicionarDias(
+  dataBase,
   dias
 ) {
   const d =
@@ -2663,7 +3071,9 @@ app.post(
 
 /* ==========================================
    CRIAR PAGAMENTO PIX
-========================================== */app.post(
+========================================== */
+
+app.post(
   '/api/mercadopago/criar-pix',
   async (req, res) => {
     try {
@@ -2858,9 +3268,7 @@ app.post(
         });
     }
   }
-);
-
-/* ==========================================
+);/* ==========================================
    CONSULTAR PAGAMENTO PIX
 ========================================== */
 
@@ -2887,7 +3295,11 @@ app.get(
           `/v1/payments/${encodeURIComponent(id)}`
         );
 
-      if (String(pagamento.status || '').toLowerCase() === 'approved') {
+      if (
+        String(
+          pagamento.status || ''
+        ).toLowerCase() === 'approved'
+      ) {
         await processarPagamento(id);
       }
 
@@ -3081,7 +3493,8 @@ async function processarPreapproval(
         null,
 
       proximo_pagamento:
-        assinatura.next_payment_date ||        null
+        assinatura.next_payment_date ||
+        null
     }
   );
 
@@ -3111,76 +3524,200 @@ async function processarPreapproval(
 async function processarPagamento(
   dataId
 ) {
-  const pagamento = await mpGet(`/v1/payments/${encodeURIComponent(dataId)}`);
-  const ref = pagamento.external_reference;
+  const pagamento =
+    await mpGet(
+      `/v1/payments/${encodeURIComponent(dataId)}`
+    );
+
+  const ref =
+    pagamento.external_reference;
 
   if (!ref) {
-    console.log('Pagamento sem external_reference:', pagamento.id);
+    console.log(
+      'Pagamento sem external_reference:',
+      pagamento.id
+    );
+
     return;
   }
 
-  const registro = await buscarAssinaturaPorReferencia(ref);
+  const registro =
+    await buscarAssinaturaPorReferencia(
+      ref
+    );
+
   if (!registro) {
-    console.log('Pagamento MP sem registro correspondente:', pagamento.id);
+    console.log(
+      'Pagamento MP sem registro correspondente:',
+      pagamento.id
+    );
+
     return;
   }
 
-  const status = String(pagamento.status || '').toLowerCase();
-  const metodo = String(pagamento.payment_method_id || '').toLowerCase();
-  const valor = Number(pagamento.transaction_amount);
+  const status =
+    String(
+      pagamento.status || ''
+    ).toLowerCase();
 
-  if (status === 'approved' && metodo === 'pix' && Math.abs(valor - 49.90) < 0.01) {
+  const metodo =
+    String(
+      pagamento.payment_method_id || ''
+    ).toLowerCase();
+
+  const valor =
+    Number(
+      pagamento.transaction_amount
+    );
+
+  if (
+    status === 'approved' &&
+    metodo === 'pix' &&
+    Math.abs(valor - 49.90) < 0.01
+  ) {
     const mesmoPagamento =
-      String(registro.mercado_pago_payment_id || '') === String(pagamento.id || '');
-    const jaAtivo = String(registro.status || '').toLowerCase() === 'active';
+      String(
+        registro.mercado_pago_payment_id || ''
+      ) ===
+      String(
+        pagamento.id || ''
+      );
 
-    // Não soma 30 dias nem reenvia e-mail quando o mesmo Pix já foi processado.
-    if (mesmoPagamento && jaAtivo && registro.user_id) {
-      console.log('Pix já processado anteriormente:', pagamento.id);
+    const jaAtivo =
+      String(
+        registro.status || ''
+      ).toLowerCase() === 'active';
+
+    // Não soma 30 dias nem reenvia e-mail
+    // quando o mesmo Pix já foi processado.
+    if (
+      mesmoPagamento &&
+      jaAtivo &&
+      registro.user_id
+    ) {
+      console.log(
+        'Pix já processado anteriormente:',
+        pagamento.id
+      );
+
       return;
     }
 
-    const agora = new Date();
-    const fimAtual = registro.acesso_fim ? new Date(registro.acesso_fim) : null;
-    const base = fimAtual && fimAtual > agora ? fimAtual : agora;
-    const acessoFim = mesmoPagamento && registro.acesso_fim
-      ? registro.acesso_fim
-      : adicionarDias(base, 30);
+    const agora =
+      new Date();
 
-    const emailCliente = String(registro.email || '').trim().toLowerCase();
-    if (!emailCliente) throw new Error('Assinatura sem e-mail do cliente.');
+    const fimAtual =
+      registro.acesso_fim
+        ? new Date(
+            registro.acesso_fim
+          )
+        : null;
 
-    const user = await garantirUsuarioAuthParaEmail(emailCliente);
-    if (!user?.id) throw new Error('Supabase não retornou o ID do usuário.');
+    const base =
+      fimAtual &&
+      fimAtual > agora
+        ? fimAtual
+        : agora;
 
-    await atualizarAssinatura(registro.id, {
-      status: 'active',
-      user_id: user.id,
-      metodo_pagamento: 'pix',
-      mercado_pago_payment_id: String(pagamento.id || ''),
-      acesso_inicio: registro.acesso_inicio || agora.toISOString(),
-      acesso_fim: acessoFim,
-      proximo_pagamento: null
-    });
+    const acessoFim =
+      mesmoPagamento &&
+      registro.acesso_fim
+        ? registro.acesso_fim
+        : adicionarDias(
+            base,
+            30
+          );
 
-    await garantirProfileAtivo(user.id, emailCliente, acessoFim);
+    const emailCliente =
+      String(
+        registro.email || ''
+      )
+        .trim()
+        .toLowerCase();
 
-    // O template "Reset password" do Supabase foi personalizado como
-    // "Pagamento aprovado — crie sua senha | AYRO ACM Pro".
-    await enviarEmailCriarSenha(emailCliente);
+    if (!emailCliente) {
+      throw new Error(
+        'Assinatura sem e-mail do cliente.'
+      );
+    }
 
-    console.log('Pix aprovado. Acesso liberado por 30 dias:', pagamento.id);
+    const user =
+      await garantirUsuarioAuthParaEmail(
+        emailCliente
+      );
+
+    if (!user?.id) {
+      throw new Error(
+        'Supabase não retornou o ID do usuário.'
+      );
+    }
+
+    await atualizarAssinatura(
+      registro.id,
+      {
+        status:
+          'active',
+
+        user_id:
+          user.id,
+
+        metodo_pagamento:
+          'pix',
+
+        mercado_pago_payment_id:
+          String(
+            pagamento.id || ''
+          ),
+
+        acesso_inicio:
+          registro.acesso_inicio ||
+          agora.toISOString(),
+
+        acesso_fim:
+          acessoFim,
+
+        proximo_pagamento:
+          null
+      }
+    );
+
+    await garantirProfileAtivo(
+      user.id,
+      emailCliente,
+      acessoFim
+    );
+
+    await enviarEmailCriarSenha(
+      emailCliente
+    );
+
+    console.log(
+      'Pix aprovado. Acesso liberado por 30 dias:',
+      pagamento.id
+    );
+
     return;
   }
 
-  await atualizarAssinatura(registro.id, {
-    status: pagamento.status || registro.status,
-    mercado_pago_payment_id: String(pagamento.id || ''),
-    metodo_pagamento: metodo || registro.metodo_pagamento || null
-  });
-}
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        pagamento.status ||
+        registro.status,
 
-/* ==========================================
+      mercado_pago_payment_id:
+        String(
+          pagamento.id || ''
+        ),
+
+      metodo_pagamento:
+        metodo ||
+        registro.metodo_pagamento ||
+        null
+    }
+  );
+}/* ==========================================
    VALIDAÇÃO DO WEBHOOK MERCADO PAGO
 ========================================== */
 
@@ -3437,51 +3974,137 @@ app.post(
   '/api/ativar-conta-pix',
   async (req, res) => {
     try {
-      const email = String(req.body?.email || '').trim().toLowerCase();
-      const paymentId = String(req.body?.payment_id || '').trim();
+      const email =
+        String(
+          req.body?.email || ''
+        )
+          .trim()
+          .toLowerCase();
 
-      if (!email || !paymentId) {
-        return res.status(400).json({ erro: 'E-mail e pagamento são obrigatórios.' });
+      const paymentId =
+        String(
+          req.body?.payment_id || ''
+        ).trim();
+
+      if (
+        !email ||
+        !paymentId
+      ) {
+        return res
+          .status(400)
+          .json({
+            erro:
+              'E-mail e pagamento são obrigatórios.'
+          });
       }
 
-      const pagamento = await mpGet(`/v1/payments/${encodeURIComponent(paymentId)}`);
-      const status = String(pagamento?.status || '').toLowerCase();
-      const metodo = String(pagamento?.payment_method_id || '').toLowerCase();
-      const valor = Number(pagamento?.transaction_amount);
-      const ref = String(pagamento?.external_reference || '');
+      const pagamento =
+        await mpGet(
+          `/v1/payments/${encodeURIComponent(paymentId)}`
+        );
 
-      if (status !== 'approved' || metodo !== 'pix' || Math.abs(valor - 49.90) >= 0.01 || !ref) {
-        return res.status(403).json({ erro: 'Este Pix ainda não está aprovado.' });
+      const status =
+        String(
+          pagamento?.status || ''
+        ).toLowerCase();
+
+      const metodo =
+        String(
+          pagamento?.payment_method_id || ''
+        ).toLowerCase();
+
+      const valor =
+        Number(
+          pagamento?.transaction_amount
+        );
+
+      const ref =
+        String(
+          pagamento?.external_reference || ''
+        );
+
+      if (
+        status !== 'approved' ||
+        metodo !== 'pix' ||
+        Math.abs(valor - 49.90) >= 0.01 ||
+        !ref
+      ) {
+        return res
+          .status(403)
+          .json({
+            erro:
+              'Este Pix ainda não está aprovado.'
+          });
       }
 
-      const registro = await buscarAssinaturaPorReferencia(ref);
+      const registro =
+        await buscarAssinaturaPorReferencia(
+          ref
+        );
+
       if (!registro) {
-        return res.status(404).json({ erro: 'Pagamento aprovado, mas a compra não foi encontrada no AYRO.' });
+        return res
+          .status(404)
+          .json({
+            erro:
+              'Pagamento aprovado, mas a compra não foi encontrada no AYRO.'
+          });
       }
 
-      const emailCompra = String(registro.email || '').trim().toLowerCase();
-      if (emailCompra !== email) {
-        return res.status(403).json({ erro: 'O e-mail informado não corresponde a esta compra.' });
+      const emailCompra =
+        String(
+          registro.email || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      if (
+        emailCompra !== email
+      ) {
+        return res
+          .status(403)
+          .json({
+            erro:
+              'O e-mail informado não corresponde a esta compra.'
+          });
       }
 
-      await processarPagamento(paymentId);
+      await processarPagamento(
+        paymentId
+      );
 
       return res.json({
-        sucesso: true,
-        email: emailCompra,
-        mensagem: 'Pagamento confirmado. Enviamos para seu e-mail o link para criar sua senha.'
+        sucesso:
+          true,
+
+        email:
+          emailCompra,
+
+        mensagem:
+          'Pagamento confirmado. Enviamos para seu e-mail o link para criar sua senha.'
       });
+
     } catch (erro) {
-      console.error('Erro ao confirmar acesso Pix:', erro?.dados || erro);
-      return res.status(500).json({
-        erro: 'Não foi possível confirmar o acesso.',
-        detalhe: erro?.dados?.message || erro?.message || String(erro)
-      });
+      console.error(
+        'Erro ao confirmar acesso Pix:',
+        erro?.dados ||
+        erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Não foi possível confirmar o acesso.',
+
+          detalhe:
+            erro?.dados?.message ||
+            erro?.message ||
+            String(erro)
+        });
     }
   }
-);
-
-/* ==========================================
+);/* ==========================================
    VERIFICAR ACESSO DO CLIENTE
 ========================================== */
 
