@@ -287,7 +287,12 @@ function quartosNoTexto(texto) {
   ];
 }
 
-function primeiroNumero(texto, re, min = 0, max = 999999) {
+function primeiroNumero(
+  texto,
+  re,
+  min = 0,
+  max = 999999
+) {
   const m = norm(texto).match(re);
 
   if (!m) return null;
@@ -332,15 +337,25 @@ function extrairAtributos(texto = '') {
 
   let conservacao = '';
 
-  if (/novo|lancamento|primeira locacao/.test(t)) {
+  if (
+    /novo|lancamento|primeira locacao/.test(t)
+  ) {
     conservacao = 'novo';
-  } else if (/reformad[oa]|renovad[oa]/.test(t)) {
+  } else if (
+    /reformad[oa]|renovad[oa]/.test(t)
+  ) {
     conservacao = 'reformado';
-  } else if (/bom estado|bem conservad[oa]/.test(t)) {
+  } else if (
+    /bom estado|bem conservad[oa]/.test(t)
+  ) {
     conservacao = 'bom estado';
-  } else if (/para reformar|precisa reform/.test(t)) {
+  } else if (
+    /para reformar|precisa reform/.test(t)
+  ) {
     conservacao = 'para reformar';
-  } else if (/usad[oa]/.test(t)) {
+  } else if (
+    /usad[oa]/.test(t)
+  ) {
     conservacao = 'usado';
   }
 
@@ -361,7 +376,12 @@ function contemTermo(texto, termo) {
   return !!b && a.includes(b);
 }
 
-function scoreProximidadeNumero(alvo, valor, peso, tol) {
+function scoreProximidadeNumero(
+  alvo,
+  valor,
+  peso,
+  tol
+) {
   if (
     !Number.isFinite(alvo) ||
     !Number.isFinite(valor)
@@ -443,19 +463,41 @@ function caminhar(obj, fn, depth = 0) {
       )
     );
   }
-}
-
-function extrairDaPagina(html, busca) {
+}function extrairDaPagina(html, busca) {
   const clean =
     String(html || '')
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;|&#160;/gi, ' ')
-      .replace(/&sup2;|&#178;/gi, '²')
-      .replace(/&quot;/gi, '"')
-      .replace(/&amp;/gi, '&')
-      .replace(/\s+/g, ' ');
+      .replace(
+        /<script[\s\S]*?<\/script>/gi,
+        ' '
+      )
+      .replace(
+        /<style[\s\S]*?<\/style>/gi,
+        ' '
+      )
+      .replace(
+        /<[^>]+>/g,
+        ' '
+      )
+      .replace(
+        /&nbsp;|&#160;/gi,
+        ' '
+      )
+      .replace(
+        /&sup2;|&#178;/gi,
+        '²'
+      )
+      .replace(
+        /&quot;/gi,
+        '"'
+      )
+      .replace(
+        /&amp;/gi,
+        '&'
+      )
+      .replace(
+        /\s+/g,
+        ' '
+      );
 
   const precos = precosNoTexto(clean);
   const areas = areasNoTexto(clean);
@@ -468,54 +510,48 @@ function extrairDaPagina(html, busca) {
   };
 
   for (const root of extrairJsonLd(html)) {
-    caminhar(
-      root,
-      o => {
-        for (const [k, v] of Object.entries(o)) {
-          if (/^(price|lowPrice|highPrice)$/i.test(k)) {
-            const n = numeroBR(v);
+    caminhar(root, o => {
+      for (const [k, v] of Object.entries(o)) {
+        if (/^(price|lowPrice|highPrice)$/i.test(k)) {
+          const n = numeroBR(v);
 
-            if (
-              Number.isFinite(n) &&
-              n >= 50000
-            ) {
-              structured.precos.push(n);
-            }
+          if (Number.isFinite(n) && n >= 50000) {
+            structured.precos.push(n);
           }
+        }
 
-          if (/floorSize|area|size/i.test(k)) {
-            const val =
-              typeof v === 'object'
-                ? (v.value || v.amount || '')
-                : v;
+        if (/floorSize|area|size/i.test(k)) {
+          const val =
+            typeof v === 'object'
+              ? (v.value || v.amount || '')
+              : v;
 
-            const n = numeroBR(val);
-
-            if (
-              Number.isFinite(n) &&
-              n >= 15 &&
-              n <= 100000
-            ) {
-              structured.areas.push(n);
-            }
-          }
+          const n = numeroBR(val);
 
           if (
-            /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
+            Number.isFinite(n) &&
+            n >= 15 &&
+            n <= 100000
           ) {
-            const n = Number(v);
+            structured.areas.push(n);
+          }
+        }
 
-            if (
-              Number.isFinite(n) &&
-              n > 0 &&
-              n < 30
-            ) {
-              structured.quartos.push(n);
-            }
+        if (
+          /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
+        ) {
+          const n = Number(v);
+
+          if (
+            Number.isFinite(n) &&
+            n > 0 &&
+            n < 30
+          ) {
+            structured.quartos.push(n);
           }
         }
       }
-    );
+    });
   }
 
   const metaPrice = [
@@ -568,10 +604,9 @@ function extrairDaPagina(html, busca) {
 
     texto: clean.slice(0, 20000)
   };
-}async function enriquecerPagina(
-  item,
-  busca
-) {
+}
+
+async function enriquecerPagina(item, busca) {
   if (!ehLinkIndividual(item.link)) {
     return item;
   }
@@ -589,10 +624,15 @@ function extrairDaPagina(html, busca) {
       {
         signal: ctrl.signal,
         redirect: 'follow',
+
         headers: {
           'user-agent': UA,
-          'accept-language': 'pt-BR,pt;q=0.9,en;q=0.7',
-          accept: 'text/html,application/xhtml+xml'
+
+          'accept-language':
+            'pt-BR,pt;q=0.9,en;q=0.7',
+
+          accept:
+            'text/html,application/xhtml+xml'
         }
       }
     );
@@ -626,27 +666,16 @@ function extrairDaPagina(html, busca) {
   }
 }
 
-function avaliarItem(
-  item,
-  busca
-) {
-  const titulo =
-    item.title || '';
-
-  const descricao =
-    item.snippet || '';
-
-  const link =
-    item.link || '';
+function avaliarItem(item, busca) {
+  const titulo = item.title || '';
+  const descricao = item.snippet || '';
+  const link = item.link || '';
 
   const texto =
     `${titulo} ${descricao}`;
 
-  const ud =
-    dadosDaUrl(link);
-
-  const pg =
-    item._pagina || {};
+  const ud = dadosDaUrl(link);
+  const pg = item._pagina || {};
 
   const full =
     `${texto} ${pg.texto || ''}`;
@@ -669,11 +698,10 @@ function avaliarItem(
     ...areasNoTexto(texto)
   ].filter(Number.isFinite);
 
-  const area =
-    escolherArea(
-      [...new Set(areas)],
-      busca.area
-    );
+  const area = escolherArea(
+    [...new Set(areas)],
+    busca.area
+  );
 
   const quartos = [
     ud.quartos,
@@ -756,14 +784,9 @@ function avaliarItem(
 
   let diferencaArea = null;
 
-  if (
-    busca.area &&
-    area
-  ) {
+  if (busca.area && area) {
     diferencaArea =
-      Math.abs(
-        area - busca.area
-      ) /
+      Math.abs(area - busca.area) /
       busca.area;
 
     if (
@@ -780,6 +803,24 @@ function avaliarItem(
     preco && area
       ? preco / area
       : null;
+
+  /*
+    HIERARQUIA AYRO V11
+
+    Bairro: 25
+    Tipo: 15
+    Área: 20
+    Quartos/suítes: 10
+    Conservação: 8
+    Vagas: 5
+    Condomínio: 4
+    Piscina/sauna: 3
+    Diferenciais: 3
+    Preço/m²: 2
+
+    TOTAL = 95
+    A pontuação é limitada a 100.
+  */
 
   let score = 0;
 
@@ -865,15 +906,19 @@ function avaliarItem(
   if (
     busca.conservacao &&
     conservacao &&
-    norm(busca.conservacao)
-      .includes(
-        norm(conservacao)
-      )
+    norm(
+      busca.conservacao
+    ).includes(
+      norm(conservacao)
+    )
   ) {
     score += 8;
-    detalhes.conservacao = true;
+
+    detalhes.conservacao =
+      true;
   } else {
-    detalhes.conservacao = null;
+    detalhes.conservacao =
+      null;
   }
 
   if (
@@ -886,9 +931,12 @@ function avaliarItem(
     busca.vagas === vagas
   ) {
     score += 5;
-    detalhes.vagas = true;
+
+    detalhes.vagas =
+      true;
   } else {
-    detalhes.vagas = null;
+    detalhes.vagas =
+      null;
   }
 
   if (
@@ -935,10 +983,16 @@ function avaliarItem(
 
   if (busca.diferenciais) {
     const termos =
-      norm(busca.diferenciais)
+      norm(
+        busca.diferenciais
+      )
         .split(/[,;]+/)
-        .map(x => x.trim())
-        .filter(x => x.length > 2);
+        .map(
+          x => x.trim()
+        )
+        .filter(
+          x => x.length > 2
+        );
 
     if (termos.length) {
       const acertos =
@@ -964,6 +1018,7 @@ function avaliarItem(
 
   if (precoM2) {
     score += 2;
+
     detalhes.preco_m2 = 2;
   }
 
@@ -988,14 +1043,21 @@ function avaliarItem(
 
     preco:
       Number.isFinite(preco)
-        ? `R$ ${Math.round(preco)
-            .toLocaleString('pt-BR')}`
+        ? `R$ ${Math.round(
+            preco
+          ).toLocaleString(
+            'pt-BR'
+          )}`
         : '',
 
     area:
       Number.isFinite(area)
-        ? `${String(area)
-            .replace('.', ',')} m²`
+        ? `${String(
+            area
+          ).replace(
+            '.',
+            ','
+          )} m²`
         : '',
 
     preco_valor: preco,
@@ -1040,6 +1102,7 @@ function avaliarItem(
         Boolean(item._pagina),
 
       diferencaArea,
+
       detalhes
     }
   };
@@ -1061,13 +1124,11 @@ async function buscarSerp(
         api_key: apiKey
       });
 
-    const r =
-      await fetch(
-        `https://serpapi.com/search.json?${params}`
-      );
+    const r = await fetch(
+      `https://serpapi.com/search.json?${params}`
+    );
 
-    const d =
-      await r.json();
+    const d = await r.json();
 
     if (!r.ok) {
       return {
@@ -1075,9 +1136,11 @@ async function buscarSerp(
         erro:
           d.error ||
           `HTTP ${r.status}`,
+
         fatal:
-          [401, 403, 429]
-            .includes(r.status)
+          [401, 403, 429].includes(
+            r.status
+          )
       };
     }
 
@@ -1087,8 +1150,9 @@ async function buscarSerp(
         erro: String(d.error),
 
         fatal:
-          /invalid api key|unauthorized|credits|account|rate limit/i
-            .test(String(d.error))
+          /invalid api key|unauthorized|credits|account|rate limit/i.test(
+            String(d.error)
+          )
       };
     }
 
@@ -1106,9 +1170,11 @@ async function buscarSerp(
   } catch (e) {
     return {
       resultados: [],
+
       erro:
         e.message ||
         String(e),
+
       fatal: false
     };
   }
@@ -1121,9 +1187,15 @@ function semOutliers(comps) {
 
   const v =
     comps
-      .map(x => x.preco_m2)
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
+      .map(
+        x => x.preco_m2
+      )
+      .filter(
+        Number.isFinite
+      )
+      .sort(
+        (a, b) => a - b
+      );
 
   if (v.length < 4) {
     return comps;
@@ -1258,105 +1330,86 @@ function calcularAvaliacao(
       usados.map(
         x => x.preco_m2
       )
+    );  const precoM2Base =
+    (
+      ponderado * 0.50 +
+      med * 0.35 +
+      avg * 0.15
     );
 
-  const referencia =
-    ponderado * 0.60 +
-    med * 0.40;
+  const valorMercado =
+    precoM2Base * area;
 
-  const mercado =
-    referencia * area;
+  const vendaRapida =
+    valorMercado * 0.93;
 
-  const rapida =
-    mercado * 0.95;
-
-  const maximo =
-    mercado * 1.05;
-
-  const simMedia =
-    media(
-      usados.map(
-        x =>
-          x.score_similaridade
-      )
-    );
+  const posicionamentoSuperior =
+    valorMercado * 1.07;
 
   return {
     calculada: true,
 
-    metodologia:
-      'Preço por m² ponderado pela similaridade dos comparáveis, combinado com a mediana para reduzir distorções. Prioridade: bairro, tipo, área, quartos/suítes, conservação, vagas, condomínio, piscina/sauna, diferenciais e R$/m².',
+    area,
 
-    comparaveis_usados:
+    quantidade_comparaveis:
       usados.length,
 
-    comparaveis_alta_similaridade:
-      fortes.length,
+    preco_m2_ponderado:
+      Math.round(precoM2Base),
 
-    similaridade_media:
-      Math.round(
-        simMedia || 0
-      ),
-
-    area_avaliada_m2:
-      area,
-
-    preco_m2_referencia:
-      Math.round(
-        referencia
-      ),
-
-    preco_m2_mediano:
+    preco_m2_mediana:
       Math.round(med),
 
-    preco_m2_medio:
+    preco_m2_media:
       Math.round(avg),
 
-    valor_venda_rapida:
-      Math.round(rapida),
+    venda_rapida:
+      Math.round(vendaRapida),
 
     valor_mercado:
-      Math.round(mercado),
+      Math.round(valorMercado),
 
-    valor_maximo_sugerido:
-      Math.round(maximo),
+    posicionamento_superior:
+      Math.round(
+        posicionamentoSuperior
+      ),
 
-    valores_formatados: {
-      venda_rapida:
-        moeda(rapida),
+    venda_rapida_formatado:
+      moeda(vendaRapida),
 
-      mercado:
-        moeda(mercado),
+    valor_mercado_formatado:
+      moeda(valorMercado),
 
-      maximo_sugerido:
-        moeda(maximo)
-    }
+    posicionamento_superior_formatado:
+      moeda(
+        posicionamentoSuperior
+      ),
+
+    metodologia:
+      'Valor calculado a partir dos comparáveis válidos, priorizando imóveis com maior similaridade e utilizando preço por m² ponderado, mediana e média da amostra.'
   };
 }
 
 function cacheGet(key) {
-  const x =
+  const item =
     searchCache.get(key);
 
-  if (!x) {
-    return null;
-  }
+  if (!item) return null;
 
   if (
-    Date.now() - x.at >
+    Date.now() -
+      item.ts >
     CACHE_TTL_MS
   ) {
     searchCache.delete(key);
+
     return null;
   }
 
-  return x.data;
+  return item.data;
 }
 
-function cacheSet(
-  key,
-  data
-) {
+function cacheSet(key, data) {
   if (
     searchCache.size >=
     CACHE_MAX
@@ -1375,45 +1428,65 @@ function cacheSet(
   searchCache.set(
     key,
     {
-      at: Date.now(),
+      ts: Date.now(),
       data
     }
   );
 }
 
 app.get(
-  '/health',
-  (req, res) =>
+  '/',
+  (req, res) => {
     res.json({
       ok: true,
-      versao: 'PRECISAO-V11'
-    })
-);
 
-app.get(
-  '/',
-  (req, res) =>
-    res.json({
+      app:
+        'AYRO ACM Pro API',
+
       status:
-        'AYRO ACM API online',
-
-      versao:
-        'PRECISAO-V11',
-
-      minimo_comparaveis:
-        MIN_COMPARAVEIS
-    })
+        'online'
+    });
+  }
 );
 
 app.get(
-  [
-    '/api/pesquisar',
-    '/api/search',
-    '/search'
-  ],
+  '/health',
+  (req, res) => {
+    res.json({
+      ok: true,
+      status: 'online'
+    });
+  }
+);
 
+app.get(
+  '/api/health',
+  (req, res) => {
+    res.json({
+      ok: true,
+      status: 'online'
+    });
+  }
+);
+
+app.get(
+  '/api/search',
   async (req, res) => {
     try {
+      const apiKey =
+        process.env.SERPAPI_KEY;
+
+      if (!apiKey) {
+        return res
+          .status(500)
+          .json({
+            ok: false,
+
+            erro:
+              'SERPAPI_KEY não configurada.'
+          });
+      }
+
       const q =
         String(
           req.query.q || ''
@@ -1423,20 +1496,10 @@ app.get(
         return res
           .status(400)
           .json({
-            erro:
-              'Informe uma pesquisa.'
-          });
-      }
+            ok: false,
 
-      const apiKey =
-        process.env.SERPAPI_KEY;
-
-      if (!apiKey) {
-        return res
-          .status(500)
-          .json({
             erro:
-              'SERPAPI_KEY não configurada no servidor.'
+              'Informe a pesquisa.'
           });
       }
 
@@ -1446,8 +1509,9 @@ app.get(
           req.query
         );
 
-      const cacheKey =        JSON.stringify({
-          q: norm(q),
+      const cacheKey =
+        JSON.stringify({
+          q,
           ...busca
         });
 
@@ -1461,160 +1525,107 @@ app.get(
         });
       }
 
-      const cidade =
-        String(busca.cidade || '')
-          .trim();
-
-      const bairro =
-        String(busca.bairro || '')
-          .trim();
-
-      const tipo =
-        String(busca.tipo || '')
-          .trim();
-
       const consultas = [];
-
-      /*
-        Mantemos a pesquisa ampla.
-        Piscina, sauna, condomínio e conservação
-        NÃO são usados para eliminar anúncios.
-        Esses dados servem apenas para aumentar
-        ou diminuir a similaridade.
-      */
-
-      if (
-        tipo &&
-        bairro &&
-        cidade
-      ) {
-        consultas.push(
-          `${tipo} à venda ${bairro} ${cidade}`
-        );
-      }
-
-      if (
-        tipo &&
-        bairro &&
-        cidade &&
-        busca.quartos
-      ) {
-        consultas.push(
-          `${tipo} ${busca.quartos} quartos à venda ${bairro} ${cidade}`
-        );
-      }
-
-      if (
-        tipo &&
-        bairro &&
-        cidade &&
-        busca.area
-      ) {
-        consultas.push(
-          `${tipo} à venda ${bairro} ${cidade} ${Math.round(busca.area)} m²`
-        );
-      }
-
-      if (
-        tipo &&
-        cidade &&
-        busca.quartos
-      ) {
-        consultas.push(
-          `${tipo} ${busca.quartos} quartos à venda ${cidade}`
-        );
-      }
-
-      if (
-        tipo &&
-        cidade
-      ) {
-        consultas.push(
-          `${tipo} à venda ${cidade}`
-        );
-      }
 
       consultas.push(q);
 
-      const consultasUnicas =
-        [...new Set(
-          consultas
-            .map(x => x.trim())
-            .filter(Boolean)
-        )];
+      if (
+        busca.tipo &&
+        busca.bairro &&
+        busca.cidade
+      ) {
+        consultas.push(
+          `${busca.tipo} à venda ${busca.bairro} ${busca.cidade}`
+        );
+      }
 
-      const porLink =
-        new Map();
+      if (
+        busca.tipo &&
+        busca.bairro
+      ) {
+        consultas.push(
+          `${busca.tipo} venda ${busca.bairro}`
+        );
+      }
 
-      const errosBusca = [];
+      if (
+        busca.tipo &&
+        busca.cidade
+      ) {
+        consultas.push(
+          `${busca.tipo} à venda ${busca.cidade}`
+        );
+      }
+
+      const unicas =
+        [
+          ...new Set(
+            consultas
+              .map(
+                x => x.trim()
+              )
+              .filter(Boolean)
+          )
+        ].slice(0, 4);
+
+      const resultadosBrutos = [];
+
+      const erros = [];
 
       for (
         const consulta
-        of consultasUnicas
+        of unicas
       ) {
-        const retorno =
+        const resp =
           await buscarSerp(
             apiKey,
             consulta,
-            20
+            30
           );
 
-        if (retorno.erro) {
-          errosBusca.push({
-            consulta,
-            erro:
-              retorno.erro
-          });
-
-          if (retorno.fatal) {
-            break;
-          }
+        if (resp.erro) {
+          erros.push(
+            resp.erro
+          );
         }
 
-        for (
-          const item
-          of retorno.resultados
-        ) {
-          if (!item.link) {
-            continue;
-          }
-
-          const link =
-            normalizarLink(
-              item.link
-            );
-
-          if (!link) {
-            continue;
-          }
-
-          /*
-            Evita duplicar o mesmo imóvel
-            encontrado em consultas diferentes.
-          */
-          if (
-            !porLink.has(link)
-          ) {
-            porLink.set(
-              link,
-              {
-                ...item,
-                link
-              }
-            );
-          }
+        if (resp.fatal) {
+          break;
         }
+
+        resultadosBrutos.push(
+          ...resp.resultados
+        );
       }
 
-      const candidatos =
-        [...porLink.values()];
+      const vistos =
+        new Set();
 
-      /*
-        Primeiro tentamos enriquecer anúncios
-        individuais para obter preço, área,
-        quartos e demais características
-        diretamente da página.
-      */
+      const candidatos = [];
+
+      for (
+        const item
+        of resultadosBrutos
+      ) {
+        const link =
+          normalizarLink(
+            item.link || ''
+          );
+
+        if (
+          !link ||
+          vistos.has(link)
+        ) {
+          continue;
+        }
+
+        vistos.add(link);
+
+        candidatos.push({
+          ...item,
+          link
+        });
+      }
 
       const individuais =
         candidatos.filter(
@@ -1624,152 +1635,69 @@ app.get(
             )
         );
 
-      const limiteEnriquecimento =
+      const lote =
         individuais.slice(
           0,
-          24
+          30
         );
 
       const enriquecidos = [];
 
-      /*
-        Processamento em pequenos grupos
-        para não sobrecarregar os portais.
-      */
+      const concorrencia = 5;
+
       for (
         let i = 0;
-        i <
-        limiteEnriquecimento.length;
-        i += 4
+        i < lote.length;
+        i += concorrencia
       ) {
         const grupo =
-          limiteEnriquecimento.slice(
+          lote.slice(
             i,
-            i + 4
+            i + concorrencia
           );
 
-        const respostas =
+        const processados =
           await Promise.all(
             grupo.map(
-              item =>
+              x =>
                 enriquecerPagina(
-                  item,
+                  x,
                   busca
                 )
             )
           );
 
         enriquecidos.push(
-          ...respostas
+          ...processados
         );
       }
 
-      /*
-        Mantemos também os candidatos que
-        não puderam ser enriquecidos.
+      const avaliados =
+        enriquecidos.map(
+          x =>
+            avaliarItem(
+              x,
+              busca
+            )
+        );
 
-        Eles ainda podem possuir preço e área
-        no título/snippet do Google.
-      */
-
-      const linksEnriquecidos =
-        new Set(
-          enriquecidos.map(
+      const validos =
+        avaliados
+          .filter(
             x =>
-              normalizarLink(
-                x.link
-              )
+              x.comparavel_valido
           )
-        );
-
-      const restantes =
-        candidatos.filter(
-          x =>
-            !linksEnriquecidos.has(
-              normalizarLink(
-                x.link
-              )
-            )
-        );
-
-      const processados = [
-        ...enriquecidos.map(
-          x =>
-            avaliarItem(
-              x,
-              busca
-            )
-        ),
-
-        ...restantes.map(
-          x =>
-            avaliarItem(
-              x,
-              busca
-            )
-        )
-      ];
-
-      /*
-        Um anúncio só entra na ACM quando
-        possui dados reais suficientes.
-
-        Não inventamos preço ou área.
-      */
+          .sort(
+            (a, b) =>
+              b.score_similaridade -
+              a.score_similaridade
+          );
 
       const comparaveis =
-        processados
-          .filter(
-            x =>
-              x.comparavel_valido &&
-              Number.isFinite(
-                x.preco_valor
-              ) &&
-              Number.isFinite(
-                x.area_valor
-              ) &&
-              Number.isFinite(
-                x.preco_m2
-              )
-          )
-          .sort(
-            (a, b) =>
-              b.score_similaridade -
-              a.score_similaridade
-          )
-          .slice(
-            0,
-            MAX_COMPARAVEIS
-          );
-
-      /*
-        Os demais resultados ficam como
-        referências, mas não entram no cálculo.
-      */
-
-      const referencias =
-        processados
-          .filter(
-            x =>
-              !comparaveis.some(
-                c =>
-                  normalizarLink(
-                    c.link
-                  ) ===
-                  normalizarLink(
-                    x.link
-                  )
-              )
-          )
-          .sort(
-            (a, b) =>
-              b.score_similaridade -
-              a.score_similaridade
-          )
-          .slice(
-            0,
-            30
-          );
+        validos.slice(
+          0,
+          MAX_COMPARAVEIS
+        );
 
       const avaliacao =
         calcularAvaliacao(
@@ -1777,689 +1705,1076 @@ app.get(
           busca.area
         );
 
-      const payload = {
-        sucesso: true,
+      const resposta = {
+        ok: true,
 
-        versao:
-          'PRECISAO-V12-MP',
+        consulta: q,
 
-        consulta:
-          q,
+        filtros: busca,
 
-        criterios:
-          busca,
+        total_resultados_brutos:
+          resultadosBrutos.length,
 
-        total:
-          processados.length,
+        total_candidatos:
+          candidatos.length,
 
-        total_comparaveis:
-          comparaveis.length,
+        total_individuais:
+          individuais.length,
 
-        minimo_comparaveis:
-          MIN_COMPARAVEIS,
+        total_validos:
+          validos.length,
 
         comparaveis,
 
-        referencias,
-
         avaliacao,
 
-        erros_busca:
-          errosBusca,
+        descartados:
+          avaliados
+            .filter(
+              x =>
+                !x.comparavel_valido
+            )
+            .slice(0, 15),
 
-        resultados: [
-          ...comparaveis,
-          ...referencias
-        ]
+        avisos:
+          erros.length
+            ? erros
+            : []
       };
 
       cacheSet(
         cacheKey,
-        payload
+        resposta
       );
 
       return res.json(
-        payload
+        resposta
       );
-
     } catch (e) {
       console.error(
-        'ERRO AYRO:',
+        'Erro /api/search:',
         e
       );
 
       return res
         .status(500)
         .json({
-          sucesso: false,
+          ok: false,
 
           erro:
-            'Erro interno na pesquisa.',
-
-          detalhe:
             e.message ||
-            String(e),
-
-          versao:
-            'PRECISAO-V12-MP'
+            'Erro interno na pesquisa.'
         });
     }
   }
 );
 
 /* ==========================================
-   AYRO ACM PRO
-   MERCADO PAGO + SUPABASE
+   SUPABASE
 ========================================== */
 
-const mpAccessToken =
-  () =>
-    process.env.MP_ACCESS_TOKEN ||
-    '';
+function supabaseUrl() {
+  return String(
+    process.env.SUPABASE_URL || ''
+  ).replace(/\/$/, '');
+}
 
-const supabaseUrl =
-  () =>
-    String(
-      process.env.SUPABASE_URL ||
-      ''
-    ).replace(/\/$/, '');
+function supabaseSecret() {
+  return String(
+    process.env.SUPABASE_SECRET_KEY || ''
+  ).trim();
+}
 
-const supabaseSecret =
-  () =>
-    process.env.SUPABASE_SECRET_KEY ||
-    '';
-
-console.log(
-  'AYRO CONFIG CHECK:',
-  {
-    SUPABASE_URL:
-      !!process.env.SUPABASE_URL,
-
-    SUPABASE_SECRET_KEY:
-      !!process.env.SUPABASE_SECRET_KEY,
-
-    MP_ACCESS_TOKEN:
-      !!process.env.MP_ACCESS_TOKEN,
-
-    MP_WEBHOOK_SECRET:
-      !!process.env.MP_WEBHOOK_SECRET,
-
-    SERPAPI_KEY:
-      !!process.env.SERPAPI_KEY,
-
-    RESEND_API_KEY:
-      !!process.env.RESEND_API_KEY
-  }
-);
-
-async function mpRequest(
-  path,
-  options = {}
-) {
-  const token =
-    mpAccessToken();
-
-  if (!token) {
-    throw new Error(
-      'MP_ACCESS_TOKEN não configurado.'
-    );
-  }
-
-  const resposta =
-    await fetch(
-      `https://api.mercadopago.com${path}`,
-      {
-        ...options,
-
-        headers: {
-          Authorization:
-            `Bearer ${token}`,
-
-          'Content-Type':
-            'application/json',
-
-          ...(options.headers || {})
-        }
-      }
-    );
-
-  const texto =
-    await resposta.text();
-
-  let dados = {};
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : {};
-  } catch {
-    dados = {
-      raw: texto
-    };
-  }
-
-  if (!resposta.ok) {
-    const erro =
-      dados?.message ||
-      dados?.error ||
-      `Mercado Pago HTTP ${resposta.status}`;
-
-    throw new Error(
-      erro
-    );
-  }
-
-  return dados;
+function supabaseConfigurado() {
+  return Boolean(
+    supabaseUrl() &&
+    supabaseSecret()
+  );
 }
 
 async function supabaseRequest(
   path,
   options = {}
 ) {
-  const url =
-    supabaseUrl();
-
-  const secret =
-    supabaseSecret();
-
-  if (
-    !url ||
-    !secret
-  ) {
+  if (!supabaseConfigurado()) {
     throw new Error(
       'Supabase não configurado.'
     );
   }
 
-  const resposta =
-    await fetch(
-      `${url}${path}`,
-      {
-        ...options,
+  const headers = {
+    apikey:
+      supabaseSecret(),
 
-        headers: {
-          apikey:
-            secret,
+    Authorization:
+      `Bearer ${supabaseSecret()}`,
 
-          Authorization:
-            `Bearer ${secret}`,
+    'Content-Type':
+      'application/json',
 
-          'Content-Type':
-            'application/json',
+    ...(options.headers || {})
+  };
 
-          Prefer:
-            'return=representation',
+  const r = await fetch(
+    `${supabaseUrl()}${path}`,
+    {
+      ...options,
+      headers
+    }
+  );
 
-          ...(options.headers || {})
-        }
-      }
-    );
+  const raw =
+    await r.text();
 
-  const texto =
-    await resposta.text();
-
-  let dados = null;
+  let data = null;
 
   try {
-    dados =
-      texto
-        ? JSON.parse(texto)
+    data =
+      raw
+        ? JSON.parse(raw)
         : null;
   } catch {
-    dados = texto;
+    data = raw;
   }
 
-  if (!resposta.ok) {
-    throw new Error(
-      typeof dados === 'string'
-        ? dados
-        : (
-            dados?.message ||
-            dados?.error ||
-            `Supabase HTTP ${resposta.status}`
+  if (!r.ok) {
+    const msg =
+      typeof data ===
+      'object'
+        ? (
+            data?.message ||
+            data?.msg ||
+            data?.error_description ||
+            data?.error ||
+            JSON.stringify(data)
           )
-    );
-  }
+        : raw;
 
-  return dados;
-}async function supabaseAuthRequest(
-  path,
-  options = {}
-) {
-  const url =
-    supabaseUrl();
-
-  const secret =
-    supabaseSecret();
-
-  if (
-    !url ||
-    !secret
-  ) {
     throw new Error(
-      'Supabase não configurado.'
+      `Supabase HTTP ${r.status}: ${msg}`
     );
   }
 
-  const resposta =
-    await fetch(
-      `${url}${path}`,
-      {
-        ...options,
-
-        headers: {
-          apikey:
-            secret,
-
-          Authorization:
-            `Bearer ${secret}`,
-
-          'Content-Type':
-            'application/json',
-
-          ...(options.headers || {})
-        }
-      }
-    );
-
-  const texto =
-    await resposta.text();
-
-  let dados = null;
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : null;
-  } catch {
-    dados = texto;
-  }
-
-  if (!resposta.ok) {
-    const erro =
-      new Error(
-        `Supabase Auth HTTP ${resposta.status}`
-      );
-
-    erro.status =
-      resposta.status;
-
-    erro.dados =
-      dados;
-
-    throw erro;
-  }
-
-  return dados;
+  return data;
 }
 
 async function buscarUsuarioAuthPorEmail(
   email
 ) {
-  const alvo =
-    String(email || '')
-      .trim()
-      .toLowerCase();
-
-  if (!alvo) {
-    return null;
-  }
-
-  const dados =
-    await supabaseAuthRequest(
-      '/auth/v1/admin/users?page=1&per_page=1000',
-      {
-        method: 'GET'
-      }
+  const data =
+    await supabaseRequest(
+      `/auth/v1/admin/users?page=1&per_page=1000`
     );
 
   const users =
-    Array.isArray(dados)
-      ? dados
+    Array.isArray(data)
+      ? data
       : (
-          Array.isArray(dados?.users)
-            ? dados.users
-            : []
+          data?.users ||
+          []
         );
 
   return (
     users.find(
       u =>
-        String(u?.email || '')
+        String(
+          u.email || ''
+        )
           .trim()
-          .toLowerCase() === alvo
+          .toLowerCase() ===
+        String(email)
+          .trim()
+          .toLowerCase()
     ) || null
   );
 }
 
-async function criarOuAtualizarUsuarioAuth(
-  email,
-  password
+async function criarUsuarioAuth(
+  email
+) {
+  return supabaseRequest(
+    '/auth/v1/admin/users',
+    {
+      method: 'POST',
+
+      body:
+        JSON.stringify({
+          email,
+
+          email_confirm:
+            true
+        })
+    }
+  );
+}
+
+async function garantirUsuarioAuthParaEmail(
+  email
 ) {
   let user =
     await buscarUsuarioAuthPorEmail(
       email
     );
 
-  if (user?.id) {
-    const atualizado =
-      await supabaseAuthRequest(
-        `/auth/v1/admin/users/${encodeURIComponent(user.id)}`,
-        {
-          method: 'PUT',
-
-          body:
-            JSON.stringify({
-              password,
-              email_confirm: true
-            })
-        }
-      );
-
-    return (
-      atualizado?.user ||
-      atualizado ||
-      user
-    );
+  if (user) {
+    return user;
   }
 
-  const criado =
-    await supabaseAuthRequest(
-      '/auth/v1/admin/users',
-      {
-        method: 'POST',
+  try {
+    user =
+      await criarUsuarioAuth(
+        email
+      );
 
-        body:
-          JSON.stringify({
-            email,
-            password,
-            email_confirm: true,
+    return user;
+  } catch (e) {
+    if (
+      /already|registered|exists|duplicate/i.test(
+        String(
+          e.message || e
+        )
+      )
+    ) {
+      user =
+        await buscarUsuarioAuthPorEmail(
+          email
+        );
 
-            user_metadata: {
-              app:
-                'AYRO ACM Pro'
-            }
-          })
+      if (user) {
+        return user;
       }
+    }
+
+    throw e;
+  }
+}
+
+async function buscarPerfilPorEmail(
+  email
+) {
+  const path =
+    `/rest/v1/profiles?email=eq.${encodeURIComponent(
+      email
+    )}&select=*&limit=1`;
+
+  const rows =
+    await supabaseRequest(
+      path
     );
 
   return (
-    criado?.user ||
-    criado
-  );
+    Array.isArray(rows)
+      ? rows[0]
+      : null
+  ) || null;
 }
 
-async function garantirUsuarioAuthParaEmail(email) {
-  const existente =
-    await buscarUsuarioAuthPorEmail(email);
-
-  if (existente?.id) {
-    return existente;
-  }
-
-  const senhaTemporaria =
-    crypto.randomBytes(32).toString('hex') +
-    'Aa1!';
-
-  const criado =
-    await supabaseAuthRequest(
-      '/auth/v1/admin/users',
+async function upsertPerfil(
+  profile
+) {
+  const r =
+    await fetch(
+      `${supabaseUrl()}/rest/v1/profiles?on_conflict=id`,
       {
         method: 'POST',
 
-        body: JSON.stringify({
-          email,
-          password:
-            senhaTemporaria,
-          email_confirm: true,
+        headers: {
+          apikey:
+            supabaseSecret(),
 
-          user_metadata: {
-            app:
-              'AYRO ACM Pro'
-          }
-        })
+          Authorization:
+            `Bearer ${supabaseSecret()}`,
+
+          'Content-Type':
+            'application/json',
+
+          Prefer:
+            'resolution=merge-duplicates,return=representation'
+        },
+
+        body:
+          JSON.stringify(
+            profile
+          )
       }
     );
 
-  return criado?.user || criado;
+  const raw =
+    await r.text();
+
+  let data = null;
+
+  try {
+    data =
+      raw
+        ? JSON.parse(raw)
+        : null;
+  } catch {
+    data = raw;
+  }
+
+  if (!r.ok) {
+    throw new Error(
+      `Supabase profile HTTP ${r.status}: ${
+        typeof data ===
+        'object'
+          ? JSON.stringify(data)
+          : raw
+      }`
+    );
+  }
+
+  return data;
 }
 
-function ayroAppUrl() {
+async function criarAssinaturaBanco(
+  dados
+) {
+  const r =
+    await fetch(
+      `${supabaseUrl()}/rest/v1/assinaturas`,
+      {
+        method: 'POST',
+
+        headers: {
+          apikey:
+            supabaseSecret(),
+
+          Authorization:
+            `Bearer ${supabaseSecret()}`,
+
+          'Content-Type':
+            'application/json',
+
+          Prefer:
+            'return=representation'
+        },
+
+        body:
+          JSON.stringify(
+            dados
+          )
+      }
+    );
+
+  const raw =
+    await r.text();
+
+  let data = null;
+
+  try {
+    data =
+      raw
+        ? JSON.parse(raw)
+        : null;
+  } catch {
+    data = raw;
+  }
+
+  if (!r.ok) {
+    throw new Error(
+      `Supabase assinatura HTTP ${r.status}: ${
+        typeof data ===
+        'object'
+          ? JSON.stringify(data)
+          : raw
+      }`
+    );
+  }
+
+  return Array.isArray(data)
+    ? data[0]
+    : data;
+}
+
+async function buscarAssinaturaPorExternalReference(
+  ref
+) {
+  const path =
+    `/rest/v1/assinaturas?external_reference=eq.${encodeURIComponent(
+      ref
+    )}&select=*&limit=1`;
+
+  const rows =
+    await supabaseRequest(
+      path
+    );
+
+  return (
+    Array.isArray(rows)
+      ? rows[0]
+      : null
+  ) || null;
+}async function buscarAssinaturaPorPaymentId(
+  paymentId
+) {
+  const path =
+    `/rest/v1/assinaturas?payment_id=eq.${encodeURIComponent(
+      String(paymentId)
+    )}&select=*&limit=1`;
+
+  const rows =
+    await supabaseRequest(
+      path
+    );
+
+  return (
+    Array.isArray(rows)
+      ? rows[0]
+      : null
+  ) || null;
+}
+
+async function atualizarAssinatura(
+  id,
+  dados
+) {
+  const r =
+    await fetch(
+      `${supabaseUrl()}/rest/v1/assinaturas?id=eq.${encodeURIComponent(
+        String(id)
+      )}`,
+      {
+        method: 'PATCH',
+
+        headers: {
+          apikey:
+            supabaseSecret(),
+
+          Authorization:
+            `Bearer ${supabaseSecret()}`,
+
+          'Content-Type':
+            'application/json',
+
+          Prefer:
+            'return=representation'
+        },
+
+        body:
+          JSON.stringify(
+            dados
+          )
+      }
+    );
+
+  const raw =
+    await r.text();
+
+  let data = null;
+
+  try {
+    data =
+      raw
+        ? JSON.parse(raw)
+        : null;
+  } catch {
+    data = raw;
+  }
+
+  if (!r.ok) {
+    throw new Error(
+      `Supabase assinatura update HTTP ${r.status}: ${
+        typeof data ===
+        'object'
+          ? JSON.stringify(data)
+          : raw
+      }`
+    );
+  }
+
+  return Array.isArray(data)
+    ? data[0]
+    : data;
+}
+
+/* ==========================================
+   MERCADO PAGO
+========================================== */
+
+function mpToken() {
+  return String(
+    process.env.MP_ACCESS_TOKEN || ''
+  ).trim();
+}
+
+function mercadoPagoConfigurado() {
+  return Boolean(
+    mpToken()
+  );
+}
+
+async function mpRequest(
+  path,
+  options = {}
+) {
+  if (!mercadoPagoConfigurado()) {
+    throw new Error(
+      'Mercado Pago não configurado.'
+    );
+  }
+
+  const headers = {
+    Authorization:
+      `Bearer ${mpToken()}`,
+
+    'Content-Type':
+      'application/json',
+
+    ...(options.headers || {})
+  };
+
+  const r = await fetch(
+    `https://api.mercadopago.com${path}`,
+    {
+      ...options,
+      headers
+    }
+  );
+
+  const raw =
+    await r.text();
+
+  let data = null;
+
+  try {
+    data =
+      raw
+        ? JSON.parse(raw)
+        : null;
+  } catch {
+    data = raw;
+  }
+
+  if (!r.ok) {
+    throw new Error(
+      `Mercado Pago HTTP ${r.status}: ${
+        typeof data ===
+        'object'
+          ? JSON.stringify(data)
+          : raw
+      }`
+    );
+  }
+
+  return data;
+}
+
+async function buscarPagamentoMP(
+  paymentId
+) {
+  return mpRequest(
+    `/v1/payments/${encodeURIComponent(
+      String(paymentId)
+    )}`
+  );
+}
+
+function normalizarEmailCliente(valor) {
+  const email =
+    String(valor || '')
+      .trim()
+      .toLowerCase();
+
+  /*
+    IMPORTANTE:
+    valida o e-mail antes de criar o PIX.
+    Isso evita pagamento aprovado com
+    endereço inválido para o Supabase.
+  */
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      email
+    )
+  ) {
+    return '';
+  }
+
+  return email;
+}
+
+/* ==========================================
+   RESEND / E-MAIL
+========================================== */
+
+function resendApiKey() {
+  return String(
+    process.env.RESEND_API_KEY || ''
+  ).trim();
+}
+
+function appUrl() {
   return String(
     process.env.APP_URL ||
     'https://ayro-acm.onrender.com'
   ).replace(/\/$/, '');
 }
 
-async function enviarEmailCriarSenha(email) {
+async function gerarLinkCriarSenha(
+  email
+) {
   const redirectTo =
-    ayroAppUrl();
+    `${appUrl()}/?type=recovery`;
 
-  await supabaseAuthRequest(
-    `/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,
-    {
-      method: 'POST',
-      body:
-        JSON.stringify({
-          email
-        })
-    }
-  );
+  const data =
+    await supabaseRequest(
+      '/auth/v1/admin/generate_link',
+      {
+        method: 'POST',
 
-  console.log(
-    'E-mail de criação de senha solicitado:',
-    email
+        body:
+          JSON.stringify({
+            type: 'recovery',
+
+            email,
+
+            options: {
+              redirectTo
+            }
+          })
+      }
+    );
+
+  return (
+    data?.action_link ||
+    data?.properties?.action_link ||
+    ''
   );
 }
 
-async function garantirProfileAtivo(
-  userId,
-  email,
-  acessoFim
+async function enviarEmailCriarSenha(
+  email
 ) {
-  if (!userId) {
-    return null;
+  const apiKey =
+    resendApiKey();
+
+  if (!apiKey) {
+    console.warn(
+      'RESEND_API_KEY não configurada. E-mail não enviado.'
+    );
+
+    return {
+      ok: false,
+      motivo:
+        'RESEND_API_KEY não configurada'
+    };
   }
 
-  const rows =
-    await supabaseRequest(
-      '/rest/v1/profiles?on_conflict=id',
+  const emailValido =
+    normalizarEmailCliente(
+      email
+    );
+
+  if (!emailValido) {
+    throw new Error(
+      'E-mail inválido para envio da criação de senha.'
+    );
+  }
+
+  const link =
+    await gerarLinkCriarSenha(
+      emailValido
+    );
+
+  if (!link) {
+    throw new Error(
+      'Não foi possível gerar o link para criação da senha.'
+    );
+  }
+
+  const html = `
+    <div style="
+      font-family:Arial,Helvetica,sans-serif;
+      background:#f4f4f4;
+      padding:32px 16px;
+      color:#222;
+    ">
+      <div style="
+        max-width:600px;
+        margin:0 auto;
+        background:#ffffff;
+        border-radius:16px;
+        overflow:hidden;
+        box-shadow:0 6px 25px rgba(0,0,0,.08);
+      ">
+
+        <div style="
+          background:#111827;
+          color:#ffffff;
+          padding:28px;
+          text-align:center;
+        ">
+          <div style="
+            font-size:26px;
+            font-weight:700;
+            letter-spacing:.5px;
+          ">
+            AYRO ACM Pro
+          </div>
+
+          <div style="
+            margin-top:7px;
+            font-size:14px;
+            opacity:.85;
+          ">
+            Análise Comparativa de Mercado
+          </div>
+        </div>
+
+        <div style="
+          padding:32px;
+        ">
+
+          <h2 style="
+            margin:0 0 16px;
+            color:#111827;
+            font-size:22px;
+          ">
+            Pagamento aprovado
+          </h2>
+
+          <p style="
+            font-size:16px;
+            line-height:1.6;
+            margin:0 0 18px;
+          ">
+            Seu pagamento do
+            <strong>AYRO ACM Pro</strong>
+            foi aprovado e seu acesso
+            por <strong>30 dias</strong>
+            está sendo liberado.
+          </p>
+
+          <p style="
+            font-size:16px;
+            line-height:1.6;
+            margin:0 0 24px;
+          ">
+            Para concluir seu cadastro,
+            clique no botão abaixo e
+            crie sua senha de acesso.
+          </p>
+
+          <div style="
+            text-align:center;
+            margin:30px 0;
+          ">
+            <a
+              href="${link}"
+              style="
+                display:inline-block;
+                background:#c8a96b;
+                color:#111827;
+                text-decoration:none;
+                padding:15px 28px;
+                border-radius:10px;
+                font-size:16px;
+                font-weight:700;
+              "
+            >
+              Criar minha senha
+            </a>
+          </div>
+
+          <p style="
+            font-size:14px;
+            line-height:1.6;
+            color:#6b7280;
+          ">
+            Se você já criou sua senha
+            diretamente no aplicativo,
+            pode ignorar este botão e
+            entrar normalmente no
+            AYRO ACM Pro.
+          </p>
+
+          <p style="
+            font-size:14px;
+            line-height:1.6;
+            color:#6b7280;
+            margin-bottom:0;
+          ">
+            E-mail cadastrado:
+            <strong>${emailValido}</strong>
+          </p>
+        </div>
+
+        <div style="
+          background:#f9fafb;
+          border-top:1px solid #e5e7eb;
+          padding:20px;
+          text-align:center;
+          color:#6b7280;
+          font-size:12px;
+        ">
+          AYRO ACM Pro •
+          Avaliação comercial de imóveis
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  const r =
+    await fetch(
+      'https://api.resend.com/emails',
       {
         method: 'POST',
 
         headers: {
-          Prefer:
-            'resolution=merge-duplicates,return=representation'
+          Authorization:
+            `Bearer ${apiKey}`,
+
+          'Content-Type':
+            'application/json'
         },
 
         body:
           JSON.stringify({
-            id:
-              userId,
+            from:
+              'AYRO ACM Pro <acesso@ayroimoveis.com.br>',
 
-            email,
+            to: [
+              emailValido
+            ],
 
-            subscription_status:
-              'active',
+            subject:
+              'Pagamento aprovado — crie sua senha | AYRO ACM Pro',
 
-            subscription_end:
-              acessoFim
+            html
           })
       }
     );
 
-  return (
-    Array.isArray(rows) &&
-    rows.length
-      ? rows[0]
-      : null
-  );
-}
+  const raw =
+    await r.text();
 
-async function buscarAssinaturaPorReferencia(
-  externalReference
-) {
-  if (!externalReference) {
-    return null;
+  let data = null;
+
+  try {
+    data =
+      raw
+        ? JSON.parse(raw)
+        : null;
+  } catch {
+    data = raw;
   }
 
-  const rows =
-    await supabaseRequest(
-      `/rest/v1/ayro_assinaturas?external_reference=eq.${encodeURIComponent(externalReference)}&select=*`,
-      {
-        method: 'GET'
-      }
+  if (!r.ok) {
+    throw new Error(
+      `Resend HTTP ${r.status}: ${
+        typeof data === 'object'
+          ? JSON.stringify(data)
+          : raw
+      }`
     );
-
-  return (
-    Array.isArray(rows) &&
-    rows.length
-      ? rows[0]
-      : null
-  );
-}
-
-async function buscarAssinaturaPorSubscriptionId(
-  subscriptionId
-) {
-  if (!subscriptionId) {
-    return null;
   }
 
-  const rows =
-    await supabaseRequest(
-      `/rest/v1/ayro_assinaturas?mercado_pago_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=*`,
-      {
-        method: 'GET'
-      }
-    );
-
-  return (
-    Array.isArray(rows) &&
-    rows.length
-      ? rows[0]
-      : null
+  console.log(
+    'E-mail AYRO enviado pelo Resend:',
+    emailValido,
+    data?.id || ''
   );
-}
 
-async function buscarAssinaturaPorEmail(
-  email
-) {
-  if (!email) {
-    return null;
-  }
-
-  const rows =
-    await supabaseRequest(
-      `/rest/v1/ayro_assinaturas?email=eq.${encodeURIComponent(email)}&select=*&order=created_at.desc&limit=1`,
-      {
-        method: 'GET'
-      }
-    );
-
-  return (
-    Array.isArray(rows) &&
-    rows.length
-      ? rows[0]
-      : null
-  );
-}
-
-async function atualizarAssinatura(
-  id,
-  patch
-) {
-  if (!id) {
-    return null;
-  }
-
-  const rows =
-    await supabaseRequest(
-      `/rest/v1/ayro_assinaturas?id=eq.${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-
-        body:
-          JSON.stringify({
-            ...patch,
-
-            updated_at:
-              new Date().toISOString()
-          })
-      }
-    );
-
-  return (
-    Array.isArray(rows) &&
-    rows.length
-      ? rows[0]
-      : null
-  );
-}
-
-async function atualizarProfile(
-  userId,
-  status,
-  acessoFim
-) {
-  if (!userId) {
-    return null;
-  }
-
-  const patch = {
-    subscription_status:
-      status
+  return {
+    ok: true,
+    data
   };
-
-  if (
-    acessoFim !== undefined
-  ) {
-    patch.subscription_end =
-      acessoFim;
-  }
-
-  const rows =
-    await supabaseRequest(
-      `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
-      {
-        method: 'PATCH',
-
-        body:
-          JSON.stringify(
-            patch
-          )
-      }
-    );
-
-  return (
-    Array.isArray(rows) &&
-    rows.length
-      ? rows[0]
-      : null
-  );
-}
-
-function adicionarDias(
-  dataBase,
-  dias
-) {
-  const d =
-    new Date(
-      dataBase ||
-      Date.now()
-    );
-
-  d.setUTCDate(
-    d.getUTCDate() +
-    dias
-  );
-
-  return d.toISOString();
 }
 
 /* ==========================================
+   ATIVAÇÃO DO ACESSO
+========================================== */
+
+function adicionarDias(
+  data,
+  dias
+) {
+  const d =
+    new Date(data);
+
+  d.setDate(
+    d.getDate() + dias
+  );
+
+  return d;
+}
+
+async function ativarAcessoPagamento(
+  registro,
+  pagamento
+) {
+  if (!registro) {
+    throw new Error(
+      'Registro da assinatura não encontrado.'
+    );
+  }
+
+  /*
+    Primeiro tenta o e-mail salvo no banco.
+
+    Se o registro antigo estiver com
+    e-mail inválido, tenta o e-mail
+    retornado pelo próprio Mercado Pago.
+  */
+  const emailRegistro =
+    normalizarEmailCliente(
+      registro.email
+    );
+
+  const emailMercadoPago =
+    normalizarEmailCliente(
+      pagamento?.payer?.email
+    );
+
+  const emailCliente =
+    emailRegistro ||
+    emailMercadoPago;
+
+  if (!emailCliente) {
+    throw new Error(
+      'Pagamento aprovado, mas não há e-mail válido para ativar o acesso.'
+    );
+  }
+
+  /*
+    Se o registro tinha e-mail inválido
+    e o Mercado Pago trouxe um válido,
+    atualiza o registro antes de criar
+    o usuário.
+  */
+  if (
+    !emailRegistro &&
+    emailMercadoPago
+  ) {
+    await atualizarAssinatura(
+      registro.id,
+      {
+        email:
+          emailCliente
+      }
+    );
+  }
+
+  const user =
+    await garantirUsuarioAuthParaEmail(
+      emailCliente
+    );
+
+  if (!user?.id) {
+    throw new Error(
+      'Não foi possível identificar o usuário no Supabase Auth.'
+    );
+  }
+
+  const agora =
+    new Date();
+
+  const perfilAtual =
+    await buscarPerfilPorEmail(
+      emailCliente
+    );
+
+  let inicio =
+    agora;
+
+  /*
+    Se ainda houver acesso ativo,
+    acrescenta os novos 30 dias ao
+    vencimento atual.
+  */
+  if (
+    perfilAtual?.access_until
+  ) {
+    const atual =
+      new Date(
+        perfilAtual.access_until
+      );
+
+    if (
+      !Number.isNaN(
+        atual.getTime()
+      ) &&
+      atual > agora
+    ) {
+      inicio =
+        atual;
+    }
+  }
+
+  const accessUntil =
+    adicionarDias(
+      inicio,
+      30
+    );
+
+  await upsertPerfil({
+    id:
+      user.id,
+
+    email:
+      emailCliente,
+
+    access_until:
+      accessUntil.toISOString(),
+
+    updated_at:
+      agora.toISOString()
+  });
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      email:
+        emailCliente,
+
+      status:
+        'approved',
+
+      payment_id:
+        String(
+          pagamento?.id || ''
+        ),
+
+      access_until:
+        accessUntil.toISOString(),
+
+      updated_at:
+        agora.toISOString()
+    }
+  );
+
+  /*
+    O acesso já foi ativado.
+    Agora tentamos enviar o e-mail.
+
+    Se o Resend falhar, NÃO retiramos
+    o acesso do cliente.
+  */
+  try {
+    await enviarEmailCriarSenha(
+      emailCliente
+    );
+  } catch (e) {
+    console.error(
+      'Acesso ativado, mas houve erro ao enviar o e-mail:',
+      e.message || e
+    );
+  }
+
+  return {
+    ok: true,
+
+    email:
+      emailCliente,
+
+    user_id:
+      user.id,
+
+    access_until:
+      accessUntil.toISOString()
+  };
+}/* ==========================================
    CRIAR ASSINATURA CARTÃO
 ========================================== */
 
@@ -2653,12 +2968,17 @@ app.post(
         nome
       } = req.body || {};
 
-      if (!email) {
+      const emailCliente =
+        normalizarEmailCliente(
+          email
+        );
+
+      if (!emailCliente) {
         return res
           .status(400)
           .json({
             erro:
-              'Informe o e-mail do cliente.'
+              'Informe um e-mail válido para receber a confirmação e criar sua senha.'
           });
       }
 
@@ -2674,42 +2994,44 @@ app.post(
           {
             method: 'POST',
 
-            body: JSON.stringify({
-              user_id:
-                user_id || null,
+            body:
+              JSON.stringify({
+                user_id:
+                  user_id || null,
 
-              email,
+                email:
+                  emailCliente,
 
-              plano:
-                'AYRO ACM Pro',
+                plano:
+                  'AYRO ACM Pro',
 
-              status:
-                'pending',
+                status:
+                  'pending',
 
-              metodo_pagamento:
-                'pix',
+                metodo_pagamento:
+                  'pix',
 
-              external_reference:
-                externalReference,
+                external_reference:
+                  externalReference,
 
-              valor:
-                49.90,
+                valor:
+                  49.90,
 
-              acesso_inicio:
-                null,
+                acesso_inicio:
+                  null,
 
-              acesso_fim:
-                null,
+                acesso_fim:
+                  null,
 
-              proximo_pagamento:
-                null,
+                proximo_pagamento:
+                  null,
 
-              created_at:
-                agora,
+                created_at:
+                  agora,
 
-              updated_at:
-                agora
-            })
+                updated_at:
+                  agora
+              })
           }
         );
 
@@ -2720,51 +3042,56 @@ app.post(
         await mpRequest(
           '/v1/payments',
           {
-            method: 'POST',
+            method:
+              'POST',
 
             headers: {
               'X-Idempotency-Key':
                 idempotencyKey
             },
 
-            body: JSON.stringify({
-              transaction_amount:
-                49.90,
+            body:
+              JSON.stringify({
+                transaction_amount:
+                  49.90,
 
-              description:
-                'AYRO ACM Pro - 30 dias',
+                description:
+                  'AYRO ACM Pro - 30 dias',
 
-              payment_method_id:
-                'pix',
+                payment_method_id:
+                  'pix',
 
-              external_reference:
-                externalReference,
+                external_reference:
+                  externalReference,
 
-              payer: {
-                email,
+                payer: {
+                  email:
+                    emailCliente,
 
-                first_name:
-                  String(
-                    nome ||
-                    'Cliente AYRO'
-                  )
-                    .trim()
-                    .split(/\s+/)[0]
-              },
+                  first_name:
+                    String(
+                      nome ||
+                      'Cliente AYRO'
+                    )
+                      .trim()
+                      .split(/\s+/)[0]
+                },
 
-              metadata: {
-                produto:
-                  'AYRO ACM Pro',
+                metadata: {
+                  produto:
+                    'AYRO ACM Pro',
 
-                tipo:
-                  'pix_30_dias',
+                  tipo:
+                    'pix_30_dias',
 
-                user_id:
-                  user_id || ''
-              }
-            })
+                  user_id:
+                    user_id || ''
+                }
+              })
           }
-        );      const registro =
+        );
+
+      const registro =
         Array.isArray(criadas) &&
         criadas.length
           ? criadas[0]
@@ -2786,14 +3113,14 @@ app.post(
         );
       }
 
-      const transactionData =
+      const transacao =
         pagamento
           ?.point_of_interaction
-          ?.transaction_data || {};
+          ?.transaction_data ||
+        {};
 
       return res.json({
-        sucesso:
-          true,
+        sucesso: true,
 
         payment_id:
           pagamento.id,
@@ -2805,16 +3132,16 @@ app.post(
           externalReference,
 
         qr_code:
-          transactionData.qr_code ||
-          '',
+          transacao.qr_code ||
+          null,
 
         qr_code_base64:
-          transactionData.qr_code_base64 ||
-          '',
+          transacao.qr_code_base64 ||
+          null,
 
         ticket_url:
-          transactionData.ticket_url ||
-          ''
+          transacao.ticket_url ||
+          null
       });
 
     } catch (erro) {
@@ -2826,11 +3153,8 @@ app.post(
       return res
         .status(500)
         .json({
-          sucesso:
-            false,
-
           erro:
-            'Erro interno ao gerar Pix.',
+            'Não foi possível gerar o Pix.',
 
           detalhe:
             erro.dados ||
@@ -2849,27 +3173,23 @@ app.get(
   '/api/mercadopago/pagamento/:id',
   async (req, res) => {
     try {
-      const paymentId =
+      const id =
         String(
           req.params.id || ''
         ).trim();
 
-      if (!paymentId) {
+      if (!id) {
         return res
           .status(400)
           .json({
             erro:
-              'Pagamento não informado.'
+              'ID do pagamento não informado.'
           });
       }
 
       const pagamento =
-        await mpRequest(
-          `/v1/payments/${encodeURIComponent(paymentId)}`,
-          {
-            method:
-              'GET'
-          }
+        await mpGet(
+          `/v1/payments/${encodeURIComponent(id)}`
         );
 
       if (
@@ -2878,21 +3198,13 @@ app.get(
         ).toLowerCase() ===
         'approved'
       ) {
-        try {
-          await processarPagamentoAprovado(
-            pagamento
-          );
-        } catch (erroProcessamento) {
-          console.error(
-            'Pagamento aprovado, mas houve erro na ativação:',
-            erroProcessamento
-          );
-        }
+        await processarPagamento(
+          id
+        );
       }
 
       return res.json({
-        sucesso:
-          true,
+        sucesso: true,
 
         id:
           pagamento.id,
@@ -2903,440 +3215,400 @@ app.get(
         status_detail:
           pagamento.status_detail,
 
-        external_reference:
-          pagamento.external_reference,
+        payment_method_id:
+          pagamento.payment_method_id,
 
-        date_approved:
-          pagamento.date_approved ||
-          null
+        external_reference:
+          pagamento.external_reference
       });
 
     } catch (erro) {
       console.error(
         'Erro ao consultar pagamento:',
-        erro
+        erro.dados || erro
       );
 
       return res
         .status(500)
         .json({
-          sucesso:
-            false,
-
           erro:
-            'Erro ao consultar pagamento.',
-
-          detalhe:
-            erro.message ||
-            String(erro)
+            'Não foi possível consultar o pagamento.'
         });
     }
   }
-);
-
-/* ==========================================
-   ATIVAR CONTA APÓS PIX
+);/* ==========================================
+   CONSULTAR ASSINATURA
 ========================================== */
 
-app.post(
-  '/api/mercadopago/ativar-conta-pix',
+app.get(
+  '/api/mercadopago/assinatura/:id',
   async (req, res) => {
     try {
-      const email =
+      const id =
         String(
-          req.body?.email || ''
-        )
-          .trim()
-          .toLowerCase();
-
-      const password =
-        String(
-          req.body?.password || ''
-        );
-
-      const paymentId =
-        String(
-          req.body?.payment_id || ''
+          req.params.id || ''
         ).trim();
 
-      if (!email) {
+      if (!id) {
         return res
           .status(400)
           .json({
-            sucesso:
-              false,
-
             erro:
-              'Informe o e-mail.'
+              'ID da assinatura não informado.'
           });
       }
 
-      if (
-        !password ||
-        password.length < 6
-      ) {
-        return res
-          .status(400)
-          .json({
-            sucesso:
-              false,
-
-            erro:
-              'A senha precisa ter pelo menos 6 caracteres.'
-          });
-      }
-
-      if (!paymentId) {
-        return res
-          .status(400)
-          .json({
-            sucesso:
-              false,
-
-            erro:
-              'Pagamento não identificado.'
-          });
-      }
-
-      const pagamento =
-        await mpRequest(
-          `/v1/payments/${encodeURIComponent(paymentId)}`,
-          {
-            method:
-              'GET'
-          }
+      const dados =
+        await mpGet(
+          `/preapproval/${encodeURIComponent(id)}`
         );
-
-      if (
-        String(
-          pagamento.status || ''
-        ).toLowerCase() !==
-        'approved'
-      ) {
-        return res
-          .status(403)
-          .json({
-            sucesso:
-              false,
-
-            erro:
-              'O pagamento ainda não foi aprovado.'
-          });
-      }
-
-      const emailPagamento =
-        String(
-          pagamento
-            ?.payer
-            ?.email ||
-          ''
-        )
-          .trim()
-          .toLowerCase();
-
-      if (
-        emailPagamento &&
-        emailPagamento !== email
-      ) {
-        return res
-          .status(403)
-          .json({
-            sucesso:
-              false,
-
-            erro:
-              'O e-mail informado não corresponde ao pagamento.'
-          });
-      }
-
-      await processarPagamentoAprovado(
-        pagamento
-      );
-
-      const usuario =
-        await criarOuAtualizarUsuarioAuth(
-          email,
-          password
-        );
-
-      const userId =
-        usuario?.id;
-
-      if (!userId) {
-        throw new Error(
-          'Não foi possível criar o usuário no Supabase.'
-        );
-      }
-
-      const externalReference =
-        String(
-          pagamento.external_reference ||
-          ''
-        );
-
-      let registro =
-        await buscarAssinaturaPorReferencia(
-          externalReference
-        );
-
-      if (!registro) {
-        registro =
-          await buscarAssinaturaPorEmail(
-            email
-          );
-      }
-
-      let acessoFim =
-        registro?.acesso_fim ||
-        null;
-
-      if (!acessoFim) {
-        acessoFim =
-          adicionarDias(
-            new Date(),
-            30
-          );
-      }
-
-      if (registro?.id) {
-        await atualizarAssinatura(
-          registro.id,
-          {
-            user_id:
-              userId,
-
-            email,
-
-            status:
-              'active',
-
-            acesso_fim:
-              acessoFim,
-
-            mercado_pago_payment_id:
-              String(
-                pagamento.id ||
-                paymentId
-              )
-          }
-        );
-      }
-
-      await garantirProfileAtivo(
-        userId,
-        email,
-        acessoFim
-      );
 
       return res.json({
-        sucesso:
-          true,
+        sucesso: true,
 
-        user_id:
-          userId,
-
-        email,
+        id:
+          dados.id,
 
         status:
-          'active',
+          dados.status,
 
-        acesso_fim:
-          acessoFim,
+        payer_email:
+          dados.payer_email,
 
-        mensagem:
-          'Conta ativada com sucesso.'
+        external_reference:
+          dados.external_reference,
+
+        next_payment_date:
+          dados.next_payment_date ||
+          null
       });
 
     } catch (erro) {
       console.error(
-        'Erro ao ativar conta Pix:',
-        erro.dados ||
-        erro
+        'Erro ao consultar assinatura:',
+        erro.dados || erro
       );
 
       return res
         .status(500)
         .json({
-          sucesso:
-            false,
-
           erro:
-            'Não foi possível ativar a conta.',
-
-          detalhe:
-            erro?.dados?.msg ||
-            erro?.dados?.message ||
-            erro.message ||
-            String(erro)
+            'Não foi possível consultar a assinatura.'
         });
     }
   }
 );
 
 /* ==========================================
-   PROCESSAR PAGAMENTO PIX APROVADO
+   PROCESSAR ASSINATURA
 ========================================== */
 
-async function processarPagamentoAprovado(
-  pagamento
+async function processarPreapproval(
+  dataId
 ) {
-  if (!pagamento?.id) {
-    return null;
-  }
-
-  const externalReference =
-    String(
-      pagamento.external_reference ||
-      ''
+  const assinatura =
+    await mpGet(
+      `/preapproval/${encodeURIComponent(dataId)}`
     );
-
-  const email =
-    String(
-      pagamento?.payer?.email ||
-      ''
-    )
-      .trim()
-      .toLowerCase();
 
   let registro =
     await buscarAssinaturaPorReferencia(
-      externalReference
+      assinatura.external_reference
     );
 
-  if (
-    !registro &&
-    email
-  ) {
+  if (!registro) {
     registro =
-      await buscarAssinaturaPorEmail(
-        email
+      await buscarAssinaturaPorSubscriptionId(
+        assinatura.id
       );
   }
 
   if (!registro) {
-    console.warn(
-      'Pagamento aprovado sem assinatura correspondente:',
-      pagamento.id
-    );
-
-    return null;
-  }
-
-  const mesmoPagamento =
-    String(
-      registro.mercado_pago_payment_id ||
-      ''
-    ) ===
-    String(
-      pagamento.id
-    );
-
-  const jaAtivo =
-    String(
-      registro.status ||
-      ''
-    ).toLowerCase() ===
-    'active';
-
-  if (
-    mesmoPagamento &&
-    jaAtivo &&
-    registro.user_id
-  ) {
     console.log(
-      'Pix já processado anteriormente:',
-      pagamento.id
+      'Assinatura MP sem registro correspondente:',
+      assinatura.id
     );
 
-    return registro;
+    return;
   }
 
-  const agora =
-    new Date();
+  const status =
+    String(
+      assinatura.status || ''
+    ).toLowerCase();
 
-  let acessoInicio =
-    registro.acesso_inicio
-      ? new Date(
-          registro.acesso_inicio
+  const ativa =
+    [
+      'authorized',
+      'active'
+    ].includes(status);
+
+  const encerrada =
+    [
+      'cancelled',
+      'canceled',
+      'paused'
+    ].includes(status);
+
+  const acessoInicio =
+    ativa
+      ? (
+          registro.acesso_inicio ||
+          new Date().toISOString()
         )
-      : agora;
-
-  if (
-    Number.isNaN(
-      acessoInicio.getTime()
-    )
-  ) {
-    acessoInicio =
-      agora;
-  }
-
-  let baseFim =
-    agora;
-
-  if (
-    registro.acesso_fim
-  ) {
-    const fimAtual =
-      new Date(
-        registro.acesso_fim
-      );
-
-    if (
-      !Number.isNaN(
-        fimAtual.getTime()
-      ) &&
-      fimAtual > agora
-    ) {
-      baseFim =
-        fimAtual;
-    }
-  }
+      : registro.acesso_inicio;
 
   const acessoFim =
-    adicionarDias(
-      baseFim,
-      30
+    ativa
+      ? (
+          assinatura.next_payment_date ||
+          registro.acesso_fim ||
+          null
+        )
+      : registro.acesso_fim;
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        assinatura.status ||
+        registro.status,
+
+      metodo_pagamento:
+        'cartao_assinatura',
+
+      mercado_pago_subscription_id:
+        String(
+          assinatura.id || ''
+        ),
+
+      acesso_inicio:
+        acessoInicio ||
+        null,
+
+      acesso_fim:
+        acessoFim ||
+        null,
+
+      proximo_pagamento:
+        assinatura.next_payment_date ||
+        null
+    }
+  );
+
+  if (registro.user_id) {
+    if (ativa) {
+      await atualizarProfile(
+        registro.user_id,
+        'active',
+        acessoFim || null
+      );
+    }
+
+    if (encerrada) {
+      await atualizarProfile(
+        registro.user_id,
+        'inactive',
+        acessoFim || null
+      );
+    }
+  }
+}
+
+/* ==========================================
+   PROCESSAR PAGAMENTO
+========================================== */
+
+async function processarPagamento(
+  dataId
+) {
+  const pagamento =
+    await mpGet(
+      `/v1/payments/${encodeURIComponent(dataId)}`
     );
 
-  let usuario =
-    null;
+  const ref =
+    pagamento.external_reference;
 
-  if (email) {
-    usuario =
-      await garantirUsuarioAuthParaEmail(
-        email
-      );
+  if (!ref) {
+    console.log(
+      'Pagamento sem external_reference:',
+      pagamento.id
+    );
+
+    return;
   }
 
-  const userId =
-    usuario?.id ||
-    registro.user_id ||
-    null;
+  const registro =
+    await buscarAssinaturaPorReferencia(
+      ref
+    );
 
-  const atualizado =
+  if (!registro) {
+    console.log(
+      'Pagamento MP sem registro correspondente:',
+      pagamento.id
+    );
+
+    return;
+  }
+
+  const status =
+    String(
+      pagamento.status || ''
+    ).toLowerCase();
+
+  const metodo =
+    String(
+      pagamento.payment_method_id || ''
+    ).toLowerCase();
+
+  const valor =
+    Number(
+      pagamento.transaction_amount
+    );
+
+  if (
+    status === 'approved' &&
+    metodo === 'pix' &&
+    Math.abs(valor - 49.90) < 0.01
+  ) {
+    const mesmoPagamento =
+      String(
+        registro.mercado_pago_payment_id ||
+        ''
+      ) ===
+      String(
+        pagamento.id || ''
+      );
+
+    const jaAtivo =
+      String(
+        registro.status || ''
+      ).toLowerCase() ===
+      'active';
+
+    /*
+      Não soma 30 dias nem reenvia
+      o e-mail quando o mesmo PIX
+      já foi processado.
+    */
+    if (
+      mesmoPagamento &&
+      jaAtivo &&
+      registro.user_id
+    ) {
+      console.log(
+        'Pix já processado anteriormente:',
+        pagamento.id
+      );
+
+      return;
+    }
+
+    const agora =
+      new Date();
+
+    const fimAtual =
+      registro.acesso_fim
+        ? new Date(
+            registro.acesso_fim
+          )
+        : null;
+
+    const base =
+      fimAtual &&
+      fimAtual > agora
+        ? fimAtual
+        : agora;
+
+    const acessoFim =
+      mesmoPagamento &&
+      registro.acesso_fim
+        ? registro.acesso_fim
+        : adicionarDias(
+            base,
+            30
+          );
+
+    /*
+      CORREÇÃO DO E-MAIL:
+      valida primeiro o e-mail salvo.
+
+      Se ele estiver inválido, tenta
+      utilizar o e-mail retornado pelo
+      Mercado Pago.
+    */
+    const emailRegistro =
+      normalizarEmailCliente(
+        registro.email
+      );
+
+    const emailMercadoPago =
+      normalizarEmailCliente(
+        pagamento?.payer?.email
+      );
+
+    const emailCliente =
+      emailRegistro ||
+      emailMercadoPago;
+
+    if (!emailCliente) {
+      throw new Error(
+        'Pagamento aprovado, mas não há e-mail válido para ativar o acesso.'
+      );
+    }
+
+    /*
+      Se o registro antigo estava com
+      e-mail inválido e o Mercado Pago
+      trouxe um endereço válido,
+      corrige o registro.
+    */
+    if (
+      !emailRegistro &&
+      emailMercadoPago
+    ) {
+      await atualizarAssinatura(
+        registro.id,
+        {
+          email:
+            emailCliente
+        }
+      );
+    }
+
+    const user =
+      await garantirUsuarioAuthParaEmail(
+        emailCliente
+      );
+
+    if (!user?.id) {
+      throw new Error(
+        'Supabase não retornou o ID do usuário.'
+      );
+    }
+
     await atualizarAssinatura(
       registro.id,
       {
-        user_id:
-          userId,
-
-        email:
-          email ||
-          registro.email,
-
         status:
           'active',
+
+        user_id:
+          user.id,
 
         metodo_pagamento:
           'pix',
 
         mercado_pago_payment_id:
           String(
-            pagamento.id
+            pagamento.id || ''
           ),
 
         acesso_inicio:
-          acessoInicio.toISOString(),
+          registro.acesso_inicio ||
+          agora.toISOString(),
 
         acesso_fim:
           acessoFim,
@@ -3346,222 +3618,151 @@ async function processarPagamentoAprovado(
       }
     );
 
-  if (userId) {
     await garantirProfileAtivo(
-      userId,
-      email ||
-      registro.email,
+      user.id,
+      emailCliente,
       acessoFim
     );
+
+    /*
+      Envia o e-mail para criação
+      da senha depois da ativação.
+    */
+    await enviarEmailCriarSenha(
+      emailCliente
+    );
+
+    console.log(
+      'Pix aprovado. Acesso liberado por 30 dias:',
+      pagamento.id
+    );
+
+    return;
   }
 
-  /*
-    Envia o e-mail somente quando este
-    pagamento ainda não havia sido
-    processado anteriormente.
-  */
-  if (
-    email &&
-    !mesmoPagamento
-  ) {
-    try {
-      await enviarEmailCriarSenha(
-        email
-      );
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        pagamento.status ||
+        registro.status,
 
-      console.log(
-        'E-mail para criação de senha enviado:',
-        email
-      );
-    } catch (erroEmail) {
-      console.error(
-        'Erro ao enviar e-mail de criação de senha:',
-        erroEmail
-      );
+      mercado_pago_payment_id:
+        String(
+          pagamento.id || ''
+        ),
+
+      metodo_pagamento:
+        metodo ||
+        registro.metodo_pagamento ||
+        null
     }
-  }
-
-  return (
-    atualizado ||
-    registro
   );
 }
 
 /* ==========================================
-   PROCESSAR ASSINATURA
+   VALIDAÇÃO DO WEBHOOK MERCADO PAGO
 ========================================== */
 
-async function processarAssinatura(
-  assinatura
+function validarAssinaturaWebhook(
+  req
 ) {
-  if (!assinatura?.id) {
-    return null;
-  }
+  const secret =
+    process.env.MP_WEBHOOK_SECRET;
 
-  const subscriptionId =
-    String(
-      assinatura.id
-    );
-
-  const externalReference =
-    String(
-      assinatura.external_reference ||
-      ''
-    );
-
-  const email =
-    String(
-      assinatura?.payer_email ||
-      ''
-    )
-      .trim()
-      .toLowerCase();
-
-  let registro =
-    await buscarAssinaturaPorSubscriptionId(
-      subscriptionId
-    );
-
-  if (
-    !registro &&
-    externalReference
-  ) {
-    registro =
-      await buscarAssinaturaPorReferencia(
-        externalReference
-      );
-  }
-
-  if (
-    !registro &&
-    email
-  ) {
-    registro =
-      await buscarAssinaturaPorEmail(
-        email
-      );
-  }
-
-  if (!registro) {
+  if (!secret) {
     console.warn(
-      'Assinatura Mercado Pago sem registro correspondente:',
-      subscriptionId
+      'MP_WEBHOOK_SECRET não configurado.'
     );
 
-    return null;
+    return false;
   }
 
-  const status =
+  const xSignature =
     String(
-      assinatura.status ||
-      ''
-    ).toLowerCase();
+      req.headers[
+        'x-signature'
+      ] || ''
+    );
 
-  const ativo =
-    [
-      'authorized',
-      'active'
-    ].includes(status);
+  const xRequestId =
+    String(
+      req.headers[
+        'x-request-id'
+      ] || ''
+    );
 
-  let acessoFim =
-    registro.acesso_fim ||
-    null;
+  if (
+    !xSignature ||
+    !xRequestId
+  ) {
+    return false;
+  }
 
-  if (ativo) {
-    const proximo =
-      assinatura.next_payment_date
-        ? new Date(
-            assinatura.next_payment_date
-          )
-        : null;
+  let ts = '';
+  let v1 = '';
 
-    if (
-      proximo &&
-      !Number.isNaN(
-        proximo.getTime()
-      )
-    ) {
-      acessoFim =
-        proximo.toISOString();
-    } else {
-      acessoFim =
-        adicionarDias(
-          new Date(),
-          30
+  for (
+    const parte
+    of xSignature.split(',')
+  ) {
+    const [
+      chave,
+      valor
+    ] =
+      parte
+        .split('=')
+        .map(
+          x => x.trim()
         );
+
+    if (chave === 'ts') {
+      ts = valor;
+    }
+
+    if (chave === 'v1') {
+      v1 = valor;
     }
   }
 
-  let userId =
-    registro.user_id ||
-    null;
-
-  if (
-    ativo &&
-    email &&
-    !userId
-  ) {
-    const usuario =
-      await garantirUsuarioAuthParaEmail(
-        email
-      );
-
-    userId =
-      usuario?.id ||
-      null;
+  if (!ts || !v1) {
+    return false;
   }
 
-  const atualizado =
-    await atualizarAssinatura(
-      registro.id,
-      {
-        user_id:
-          userId,
-
-        email:
-          email ||
-          registro.email,
-
-        mercado_pago_subscription_id:
-          subscriptionId,
-
-        status:
-          ativo
-            ? 'active'
-            : status,
-
-        metodo_pagamento:
-          'cartao_assinatura',
-
-        acesso_inicio:
-          ativo &&
-          !registro.acesso_inicio
-            ? new Date().toISOString()
-            : registro.acesso_inicio,
-
-        acesso_fim:
-          acessoFim,
-
-        proximo_pagamento:
-          assinatura.next_payment_date ||
-          null
-      }
+  const dataId =
+    String(
+      req.query?.['data.id'] ||
+      req.body?.data?.id ||
+      req.body?.id ||
+      ''
     );
 
-  if (userId) {
-    await atualizarProfile(
-      userId,
-      ativo
-        ? 'active'
-        : status,
-      acessoFim
-    );
+  if (!dataId) {
+    return false;
   }
 
-  return (
-    atualizado ||
-    registro
-  );
+  const manifest =
+    `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+
+  const assinaturaEsperada =
+    crypto
+      .createHmac(
+        'sha256',
+        secret
+      )
+      .update(manifest)
+      .digest('hex');
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(
+        assinaturaEsperada
+      ),
+      Buffer.from(v1)
+    );
+  } catch {
+    return false;
+  }
 }/* ==========================================
    WEBHOOK MERCADO PAGO
 ========================================== */
@@ -3570,28 +3771,27 @@ app.post(
   '/api/mercadopago/webhook',
   async (req, res) => {
     /*
-      Respondemos rapidamente ao Mercado Pago.
+      Responde rapidamente ao Mercado Pago.
       O processamento continua logo abaixo.
     */
-    res.status(200).json({
-      recebido: true
-    });
+    res.sendStatus(200);
 
     try {
-      const body =
-        req.body || {};
-
       const type =
         String(
-          body.type ||
-          body.topic ||
+          req.body?.type ||
+          req.body?.topic ||
+          req.query?.type ||
+          req.query?.topic ||
           ''
         ).toLowerCase();
 
       const dataId =
         String(
-          body?.data?.id ||
-          body.id ||
+          req.body?.data?.id ||
+          req.body?.id ||
+          req.query?.['data.id'] ||
+          req.query?.id ||
           ''
         ).trim();
 
@@ -3603,169 +3803,64 @@ app.post(
         }
       );
 
-      /*
-        PAGAMENTO / PIX
-      */
-      if (
-        dataId &&
-        (
-          type === 'payment' ||
-          type === 'payments'
-        )
-      ) {
-        const pagamento =
-          await mpRequest(
-            `/v1/payments/${encodeURIComponent(dataId)}`,
-            {
-              method: 'GET'
-            }
-          );
-
-        const status =
-          String(
-            pagamento.status ||
-            ''
-          ).toLowerCase();
-
-        if (
-          status ===
-          'approved'
-        ) {
-          await processarPagamentoAprovado(
-            pagamento
-          );
-        } else {
-          const externalReference =
-            String(
-              pagamento.external_reference ||
-              ''
-            );
-
-          const registro =
-            await buscarAssinaturaPorReferencia(
-              externalReference
-            );
-
-          if (registro?.id) {
-            await atualizarAssinatura(
-              registro.id,
-              {
-                mercado_pago_payment_id:
-                  String(
-                    pagamento.id ||
-                    ''
-                  ),
-
-                status:
-                  status ||
-                  'pending'
-              }
-            );
-          }
-        }
-
-        return;
-      }
-
-      /*
-        ASSINATURA RECORRENTE
-      */
-      if (
-        dataId &&
-        (
-          type === 'subscription_preapproval' ||
-          type === 'preapproval' ||
-          type === 'subscription'
-        )
-      ) {
-        const assinatura =
-          await mpRequest(
-            `/preapproval/${encodeURIComponent(dataId)}`,
-            {
-              method:
-                'GET'
-            }
-          );
-
-        await processarAssinatura(
-          assinatura
+      if (!dataId) {
+        console.log(
+          'Webhook recebido sem data.id.'
         );
 
         return;
       }
 
       /*
-        Algumas notificações do Mercado Pago
-        podem chegar sem "type" explícito.
-        Se o ID estiver presente, tentamos
-        identificar como pagamento.
+        A validação da assinatura é registrada,
+        mas o webhook não é descartado apenas
+        por ausência de assinatura para manter
+        compatibilidade com notificações já
+        configuradas no Mercado Pago.
       */
-      if (dataId) {
-        try {
-          const pagamento =
-            await mpRequest(
-              `/v1/payments/${encodeURIComponent(dataId)}`,
-              {
-                method:
-                  'GET'
-              }
-            );
+      const assinaturaValida =
+        validarAssinaturaWebhook(
+          req
+        );
 
-          if (pagamento?.id) {
-            const status =
-              String(
-                pagamento.status ||
-                ''
-              ).toLowerCase();
-
-            if (
-              status ===
-              'approved'
-            ) {
-              await processarPagamentoAprovado(
-                pagamento
-              );
-            }
-
-            return;
-          }
-        } catch {
-          /*
-            Não era pagamento.
-            Tentamos assinatura abaixo.
-          */
-        }
-
-        try {
-          const assinatura =
-            await mpRequest(
-              `/preapproval/${encodeURIComponent(dataId)}`,
-              {
-                method:
-                  'GET'
-              }
-            );
-
-          if (assinatura?.id) {
-            await processarAssinatura(
-              assinatura
-            );
-          }
-        } catch (erroAssinatura) {
-          console.log(
-            'Webhook ignorado:',
-            erroAssinatura.message ||
-            String(
-              erroAssinatura
-            )
-          );
-        }
+      if (!assinaturaValida) {
+        console.warn(
+          'Webhook Mercado Pago recebido sem assinatura válida.'
+        );
       }
+
+      if (
+        type === 'payment' ||
+        type === 'payments'
+      ) {
+        await processarPagamento(
+          dataId
+        );
+
+        return;
+      }
+
+      if (
+        type === 'subscription_preapproval' ||
+        type === 'preapproval'
+      ) {
+        await processarPreapproval(
+          dataId
+        );
+
+        return;
+      }
+
+      console.log(
+        'Tipo de webhook não processado:',
+        type
+      );
 
     } catch (erro) {
       console.error(
         'Erro no webhook Mercado Pago:',
         erro.dados ||
+        erro.message ||
         erro
       );
     }
@@ -3773,113 +3868,7 @@ app.post(
 );
 
 /* ==========================================
-   WEBHOOK ALTERNATIVO
-   Mantido para compatibilidade
-========================================== */
-
-app.post(
-  '/webhook',
-  async (req, res) => {
-    res.status(200).json({
-      recebido: true
-    });
-
-    try {
-      const body =
-        req.body || {};
-
-      const type =
-        String(
-          body.type ||
-          body.topic ||
-          ''
-        ).toLowerCase();
-
-      const dataId =
-        String(
-          body?.data?.id ||
-          body.id ||
-          ''
-        ).trim();
-
-      if (!dataId) {
-        return;
-      }
-
-      if (
-        type === 'payment' ||
-        type === 'payments' ||
-        !type
-      ) {
-        try {
-          const pagamento =
-            await mpRequest(
-              `/v1/payments/${encodeURIComponent(dataId)}`,
-              {
-                method:
-                  'GET'
-              }
-            );
-
-          if (
-            String(
-              pagamento.status ||
-              ''
-            ).toLowerCase() ===
-            'approved'
-          ) {
-            await processarPagamentoAprovado(
-              pagamento
-            );
-          }
-
-          return;
-
-        } catch (erroPagamento) {
-          console.log(
-            'ID do webhook não identificado como pagamento:',
-            dataId
-          );
-        }
-      }
-
-      try {
-        const assinatura =
-          await mpRequest(
-            `/preapproval/${encodeURIComponent(dataId)}`,
-            {
-              method:
-                'GET'
-            }
-          );
-
-        if (assinatura?.id) {
-          await processarAssinatura(
-            assinatura
-          );
-        }
-
-      } catch (erroAssinatura) {
-        console.log(
-          'Webhook alternativo ignorado:',
-          erroAssinatura.message ||
-          String(
-            erroAssinatura
-          )
-        );
-      }
-
-    } catch (erro) {
-      console.error(
-        'Erro no webhook alternativo:',
-        erro
-      );
-    }
-  }
-);
-
-/* ==========================================
-   VERIFICAR ACESSO DO CLIENTE
+   VERIFICAR ACESSO
 ========================================== */
 
 app.get(
@@ -3887,148 +3876,76 @@ app.get(
   async (req, res) => {
     try {
       const email =
-        String(
-          req.query.email ||
-          ''
-        )
-          .trim()
-          .toLowerCase();
+        normalizarEmailCliente(
+          req.query.email
+        );
 
       if (!email) {
         return res
           .status(400)
           .json({
-            ativo:
-              false,
+            ativo: false,
 
             erro:
-              'Informe o e-mail.'
+              'Informe um e-mail válido.'
           });
       }
 
-      const registro =
-        await buscarAssinaturaPorEmail(
+      const user =
+        await buscarUsuarioAuthPorEmail(
           email
         );
 
-      if (!registro) {
+      if (!user?.id) {
         return res.json({
-          ativo:
-            false,
+          ativo: false,
 
-          status:
-            'not_found',
-
-          plano:
-            'AYRO ACM Pro',
-
-          acesso_inicio:
-            null,
-
-          acesso_fim:
-            null
+          motivo:
+            'Usuário não encontrado.'
         });
       }
 
-      const agora =
-        new Date();
+      const perfil =
+        await buscarPerfilPorEmail(
+          email
+        );
 
-      const fim =
-        registro.acesso_fim
+      if (!perfil) {
+        return res.json({
+          ativo: false,
+
+          motivo:
+            'Perfil não encontrado.'
+        });
+      }
+
+      const acessoFim =
+        perfil.access_until
           ? new Date(
-              registro.acesso_fim
+              perfil.access_until
             )
           : null;
 
-      const status =
-        String(
-          registro.status ||
-          ''
-        ).toLowerCase();
-
-      let ativo =
-        false;
-
-      if (
-        registro.metodo_pagamento ===
-        'pix'
-      ) {
-        ativo =
-          status === 'active' &&
-          fim &&
-          fim > agora;
-
-      } else {
-        ativo =
-          [
-            'active',
-            'authorized',
-            'approved'
-          ].includes(status) &&
-          (
-            !fim ||
-            fim > agora
-          );
-      }
-
-      /*
-        Se os 30 dias do Pix acabaram,
-        marcamos a assinatura como expirada.
-      */
-      if (
-        registro.metodo_pagamento ===
-          'pix' &&
-        status ===
-          'active' &&
-        fim &&
-        fim <= agora
-      ) {
-        await atualizarAssinatura(
-          registro.id,
-          {
-            status:
-              'expired'
-          }
+      const ativo =
+        Boolean(
+          acessoFim &&
+          !Number.isNaN(
+            acessoFim.getTime()
+          ) &&
+          acessoFim >
+            new Date()
         );
-
-        if (
-          registro.user_id
-        ) {
-          await atualizarProfile(
-            registro.user_id,
-            'inactive',
-            registro.acesso_fim
-          );
-        }
-      }
 
       return res.json({
         ativo,
 
-        status:
-          ativo
-            ? 'active'
-            : (
-                fim &&
-                fim <= agora
-                  ? 'expired'
-                  : status
-              ),
+        email,
 
-        plano:
-          registro.plano ||
-          'AYRO ACM Pro',
-
-        metodo_pagamento:
-          registro.metodo_pagamento ||
-          null,
-
-        acesso_inicio:
-          registro.acesso_inicio ||
-          null,
+        user_id:
+          user.id,
 
         acesso_fim:
-          registro.acesso_fim ||
+          perfil.access_until ||
           null
       });
 
@@ -4041,8 +3958,7 @@ app.get(
       return res
         .status(500)
         .json({
-          ativo:
-            false,
+          ativo: false,
 
           erro:
             'Não foi possível verificar o acesso.'
@@ -4052,79 +3968,69 @@ app.get(
 );
 
 /* ==========================================
-   ROTA DE STATUS DA API
+   STATUS DAS INTEGRAÇÕES
 ========================================== */
 
 app.get(
   '/api/status',
   (req, res) => {
     res.json({
-      ok:
-        true,
+      ok: true,
 
-      sistema:
+      app:
         'AYRO ACM Pro',
 
-      api:
-        'online',
-
-      versao:
-        'PRECISAO-V12-MP',
-
-      comparaveis: {
-        minimo:
-          MIN_COMPARAVEIS,
-
-        maximo:
-          MAX_COMPARAVEIS
-      },
-
-      configuracao: {
-        serpapi:
-          !!process.env.SERPAPI_KEY,
-
+      integracoes: {
         supabase:
-          !!(
+          Boolean(
             process.env.SUPABASE_URL &&
             process.env.SUPABASE_SECRET_KEY
           ),
 
         mercado_pago:
-          !!process.env.MP_ACCESS_TOKEN,
+          Boolean(
+            process.env.MP_ACCESS_TOKEN
+          ),
 
-        email:
-          !!process.env.RESEND_API_KEY
+        webhook_secret:
+          Boolean(
+            process.env.MP_WEBHOOK_SECRET
+          ),
+
+        resend:
+          Boolean(
+            process.env.RESEND_API_KEY
+          ),
+
+        serpapi:
+          Boolean(
+            process.env.SERPAPI_KEY
+          )
       }
     });
   }
 );
 
 /* ==========================================
-   TRATAMENTO DE ROTA NÃO ENCONTRADA
+   ERRO 404 API
 ========================================== */
 
 app.use(
+  '/api',
   (req, res) => {
-    res
+    return res
       .status(404)
       .json({
-        sucesso:
-          false,
+        ok: false,
 
         erro:
-          'Rota não encontrada.',
-
-        metodo:
-          req.method,
-
-        rota:
-          req.originalUrl
+          'Rota da API não encontrada.'
       });
   }
 );
 
 /* ==========================================
-   TRATAMENTO DE ERRO EXPRESS
+   TRATAMENTO DE ERROS
 ========================================== */
 
 app.use(
@@ -4150,8 +4056,7 @@ app.use(
     return res
       .status(500)
       .json({
-        sucesso:
-          false,
+        ok: false,
 
         erro:
           'Erro interno do servidor.'
@@ -4164,56 +4069,44 @@ app.use(
 ========================================== */
 
 const PORT =
-  process.env.PORT ||
-  3000;
+  Number(
+    process.env.PORT
+  ) || 3000;
 
-if (
-  require.main === module
-) {
-  app.listen(
-    PORT,
-    () => {
-      console.log(
-        `AYRO ACM API PRECISAO-V12-MP rodando na porta ${PORT}`
-      );
+app.listen(
+  PORT,
+  '0.0.0.0',
+  () => {
+    console.log(
+      `AYRO ACM Pro API rodando na porta ${PORT}`
+    );
 
-      console.log(
-        'Pesquisa de comparáveis:',
-        process.env.SERPAPI_KEY
-          ? 'configurada'
-          : 'SERPAPI_KEY ausente'
-      );
+    console.log(
+      'Supabase:',
+      supabaseConfigurado()
+        ? 'configurado'
+        : 'não configurado'
+    );
 
-      console.log(
-        'Mercado Pago:',
-        process.env.MP_ACCESS_TOKEN
-          ? 'configurado'
-          : 'não configurado'
-      );
+    console.log(
+      'Mercado Pago:',
+      mercadoPagoConfigurado()
+        ? 'configurado'
+        : 'não configurado'
+    );
 
-      console.log(
-        'Supabase:',
-        (
-          process.env.SUPABASE_URL &&
-          process.env.SUPABASE_SECRET_KEY
-        )
-          ? 'configurado'
-          : 'não configurado'
-      );
-    }
-  );
-}
+    console.log(
+      'Resend:',
+      resendApiKey()
+        ? 'configurado'
+        : 'não configurado'
+    );
 
-/* ==========================================
-   EXPORTS
-========================================== */
-
-module.exports = {
-  app,
-  dadosDaBusca,
-  dadosDaUrl,
-  ehLinkIndividual,
-  extrairDaPagina,
-  avaliarItem,
-  calcularAvaliacao
-};
+    console.log(
+      'SerpApi:',
+      process.env.SERPAPI_KEY
+        ? 'configurado'
+        : 'não configurado'
+    );
+  }
+);
