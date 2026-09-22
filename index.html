@@ -160,8 +160,8 @@ function initAyroSupabase(){
           <div id="pixStatus" class="muted" style="margin-top:8px">Aguardando pagamento...</div>
           <div id="activateAccountBox" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #ead89b;text-align:left">
             <div style="font-weight:900;color:#177245;margin-bottom:6px">✓ Pagamento aprovado</div>
-            <div class="muted" style="margin-bottom:6px">Enviamos para o seu e-mail a confirmação do pagamento e o link para criar sua senha do AYRO ACM Pro.</div>
-            <div class="muted">Abra o e-mail e clique em <strong>Criar minha senha</strong>. Se não encontrar, verifique também a caixa de spam.</div>
+            <div class="muted" style="margin-bottom:6px">Enviamos para o seu e-mail o link para criar sua senha do AYRO ACM Pro.</div>
+            <div class="muted">Abra o e-mail, clique em <strong>Criar minha senha</strong> e depois volte ao AYRO para entrar.</div>
           </div>
         </div>
         <div id="subscriptionStatus" class="subscription-status"></div>
@@ -462,7 +462,7 @@ function acompanharPix(paymentId,email){
       if(st==='approved'){
         clearInterval(ayroPixTimer);ayroPixTimer=null;
         document.getElementById('pixStatus').textContent='Pagamento aprovado! Seu acesso foi liberado por 30 dias.';
-        setSubscriptionStatus('Pagamento aprovado. Enviamos para seu e-mail o link para criar sua senha.','ok');
+        setSubscriptionStatus('Pagamento aprovado. Enviamos para o seu e-mail o link para criar sua senha.','ok');
         const activateBox=document.getElementById('activateAccountBox');
         if(activateBox) activateBox.style.display='block';
       }else if(['rejected','cancelled','canceled','refunded','charged_back'].includes(st)){
@@ -706,22 +706,42 @@ function loadSettings(){
 async function restoreAyroSession(){
   const client=initAyroSupabase();
   if(!client) return;
+
+  const hash=window.location.hash||'';
+  const params=new URLSearchParams(window.location.search||'');
+  const recoveryLink=hash.includes('type=recovery')||params.has('code');
+
+  // Nunca encerra a sessão criada pelo link de recuperação do Supabase.
+  if(recoveryLink){
+    document.getElementById('appScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    setTimeout(openRecoveryMode,150);
+    return;
+  }
+
   try{ await client.auth.signOut(); }catch(err){ console.error('AYRO sessão:',err); }
   localStorage.removeItem('ayro_user');
   localStorage.removeItem('ayro_profile');
   document.getElementById('appScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
 }
-restoreAyroSession();
 
 (function setupAyroRecovery(){
   const client=initAyroSupabase();
   if(!client) return;
+
   client.auth.onAuthStateChange((event)=>{
     if(event==='PASSWORD_RECOVERY') openRecoveryMode();
   });
-  if((window.location.hash||'').includes('type=recovery')) setTimeout(openRecoveryMode,150);
+
+  const hash=window.location.hash||'';
+  const params=new URLSearchParams(window.location.search||'');
+  if(hash.includes('type=recovery')||params.has('code')){
+    setTimeout(openRecoveryMode,150);
+  }
 })();
+
+restoreAyroSession();
 addRow();addRow();addRow();refreshAll();
 </script>
 </body>
