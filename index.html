@@ -127,10 +127,22 @@ td input,td select{padding:8px}
   .report-values p{break-inside:avoid;page-break-inside:avoid}
   .report-note{font-size:11px;line-height:1.5}
 }
+
+  /* AYRO PDF: evita cortes de conteúdo entre páginas */
+  .ayro-pdf-export{background:#fff!important;color:#111!important;width:190mm!important;max-width:190mm!important;padding:6mm!important;box-sizing:border-box!important;}
+  .ayro-pdf-export .no-print,.ayro-pdf-export .sidebar,.ayro-pdf-export .top{display:none!important;}
+  .ayro-pdf-export .grid{display:block!important;}
+  .ayro-pdf-export .card{width:100%!important;max-width:100%!important;margin:0 0 5mm!important;box-shadow:none!important;break-inside:avoid;page-break-inside:avoid;}
+  .ayro-pdf-export .card.report{break-inside:auto!important;page-break-inside:auto!important;overflow:visible!important;}
+  .ayro-pdf-export #report,.ayro-pdf-export .technical-report{height:auto!important;max-height:none!important;overflow:visible!important;break-inside:auto!important;page-break-inside:auto!important;}
+  .ayro-pdf-export #report p,.ayro-pdf-export .technical-report p,.ayro-pdf-export .report-values p{break-inside:avoid!important;page-break-inside:avoid!important;}
+  .ayro-pdf-export table{width:100%!important;font-size:9px!important;}
+
 </style>
 
 <!-- AYRO ACM: Supabase -->
 <script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 window.ayroSupabase = null;
@@ -319,7 +331,8 @@ function initAyroSupabase(){
             <h2>6. Salvar e compartilhar</h2>
             <div class="actions" style="flex-direction:column">
               <button class="btn gold full" onclick="saveACM()">💾 Salvar avaliação</button>
-              <button class="btn full" onclick="window.print()">🖨️ Gerar / salvar PDF</button>
+              <button class="btn full" onclick="generatePDF()">🖨️ Gerar / salvar PDF</button>
+              <button class="btn full" onclick="sharePDF()">📲 Compartilhar PDF no WhatsApp</button>
               <button class="btn light full" onclick="exportCurrent()">⬇️ Exportar JSON</button>
               <button class="btn light full" onclick="newACM()">＋ Limpar para nova ACM</button>
             </div>
@@ -730,6 +743,57 @@ async function openSearches(){
  }finally{
    if(btn){btn.disabled=false;btn.textContent='🔎 Pesquisar comparáveis';}
  }
+}
+async function buildPDFBlob(){
+  if(typeof html2pdf==='undefined') throw new Error('Gerador de PDF não carregado. Verifique sua conexão e tente novamente.');
+  const source=document.getElementById('page-acm');
+  if(!source) throw new Error('Área da ACM não encontrada.');
+  const clone=source.cloneNode(true);
+  clone.classList.add('ayro-pdf-export');
+  clone.style.display='block';
+  clone.querySelectorAll('.no-print').forEach(el=>el.remove());
+  clone.querySelectorAll('input,select,textarea').forEach(el=>{
+    const span=document.createElement('span');
+    span.textContent=el.tagName==='SELECT' ? (el.selectedOptions?.[0]?.textContent||el.value) : el.value;
+    span.style.cssText='display:block;padding:7px 9px;border:1px solid #ddd;border-radius:6px;min-height:18px;white-space:pre-wrap;';
+    el.replaceWith(span);
+  });
+  const holder=document.createElement('div');
+  holder.style.cssText='position:fixed;left:-100000px;top:0;background:#fff;z-index:-1;';
+  holder.appendChild(clone); document.body.appendChild(holder);
+  try{
+    const opt={
+      margin:[8,8,10,8],
+      filename:'AYRO-ACM-Pro.pdf',
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',scrollY:0},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+      pagebreak:{mode:['css','legacy'],before:[],after:[],avoid:['.kpi','.statbar>div','.report-values p','tr']}
+    };
+    return await html2pdf().set(opt).from(clone).outputPdf('blob');
+  } finally { holder.remove(); }
+}
+async function generatePDF(){
+  try{
+    const blob=await buildPDFBlob();
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='AYRO-ACM-Pro.pdf';document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){alert('Não foi possível gerar o PDF: '+e.message);}
+}
+async function sharePDF(){
+  try{
+    const blob=await buildPDFBlob();
+    const file=new File([blob],'AYRO-ACM-Pro.pdf',{type:'application/pdf'});
+    if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+      await navigator.share({title:'AYRO ACM Pro',text:'Análise Comparativa de Mercado — AYRO ACM Pro',files:[file]});
+      return;
+    }
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    alert('Seu navegador não permite compartilhar o PDF diretamente. O arquivo foi baixado; abra-o e use Compartilhar para enviar pelo WhatsApp.');
+  }catch(e){if(e?.name!=='AbortError')alert('Não foi possível compartilhar o PDF: '+e.message);}
 }
 function exportCurrent(){
  const d={property:getForm(),comparables:rows,result:lastResult};download('ayro-acm-atual.json',JSON.stringify(d,null,2));
