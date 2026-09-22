@@ -95,7 +95,23 @@ td input,td select{padding:8px}
 
 @media(max-width:1050px){.app{grid-template-columns:1fr}.sidebar{display:none}.formgrid{grid-template-columns:repeat(2,1fr)}.kpis{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.login{grid-template-columns:1fr}.login-hero{display:none}.s8,.s7,.s6,.s5,.s4,.s3{grid-column:span 12}.portal-grid{grid-template-columns:repeat(2,1fr)}table{display:block;overflow:auto;white-space:nowrap}}
-@media(max-width:520px){.content{padding:12px}.formgrid,.kpis,.portal-grid{grid-template-columns:1fr}.statbar{grid-template-columns:1fr}.statbar>div+div{border-left:0;border-top:1px solid var(--line)}}
+@media(max-width:520px){
+  html,body{max-width:100%;overflow-x:hidden}
+  .screen,.app,.main,.content,.page,.grid,.card{min-width:0;max-width:100%}
+  .content{padding:10px}
+  .card{padding:14px}
+  .formgrid,.kpis,.portal-grid{grid-template-columns:minmax(0,1fr)!important}
+  .formgrid>*,.kpis>*,.portal-grid>*{min-width:0;max-width:100%}
+  .kpi{width:100%;min-width:0}
+  .kpi b{font-size:23px;overflow-wrap:anywhere}
+  .statbar{grid-template-columns:1fr}
+  .statbar>div+div{border-left:0;border-top:1px solid var(--line)}
+  .head{align-items:flex-start;flex-wrap:wrap}
+  .actions{width:100%}
+  .actions .btn{max-width:100%}
+  input,select,textarea{min-width:0;max-width:100%}
+  table{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
 @media print{.sidebar,.top,.no-print{display:none!important}.app{display:block}body{background:#fff}.content{padding:0;max-width:none}.page{display:none!important}#page-acm{display:block!important}.card{box-shadow:none;break-inside:avoid}}
 </style>
 
@@ -236,6 +252,7 @@ function initAyroSupabase(){
               <div><label>IPTU (R$/mês)</label><input id="iptu" type="number" value="0"></div>
               <div><label>Piscina</label><select id="pool"><option value="nao" selected>Não</option><option value="sim">Sim</option></select></div>
               <div><label>Sauna</label><select id="sauna"><option value="nao" selected>Não</option><option value="sim">Sim</option></select></div>
+              <div><label>Dependência</label><select id="dependency"><option value="nao" selected>Não</option><option value="sim">Sim</option></select></div>
               <div style="grid-column:span 2"><label>Diferenciais</label><input id="features" placeholder="Vista, piscina, varanda, elevador, lareira..."></div>
             </div>
             <div class="actions no-print">
@@ -600,14 +617,14 @@ function calculate(){
   document.getElementById('statPPM').textContent='R$ '+NUM.format(base);
   document.getElementById('statCount').textContent=filtered.length;
   document.getElementById('confidence').textContent=confidence;
-  const owner=document.getElementById('owner').value||'proprietário',bairro=document.getElementById('bairro').value||'bairro informado',city=document.getElementById('city').value,type=document.getElementById('type').value;
-  document.getElementById('report').innerHTML=`<p>Para o imóvel de <strong>${owner}</strong>, localizado em <strong>${bairro}, ${city}</strong>, foram considerados <strong>${filtered.length} imóveis comparáveis</strong>. A referência ponderada encontrada foi de <strong>R$ ${NUM.format(base)}/m²</strong>.</p><p>O valor central recomendado para este ${type.toLowerCase()} é <strong>${BRL.format(round5(market))}</strong>. Para maior liquidez, a estratégia indicada é próxima de <strong>${BRL.format(round5(quick))}</strong>. Para posicionamento superior, com maior margem de negociação e potencial aumento do prazo de venda, a referência é <strong>${BRL.format(round5(upper))}</strong>.</p><p>Esta ACM representa opinião mercadológica baseada em preços anunciados e características comparáveis. Não substitui laudo técnico formal quando este for legalmente exigido.</p>`;
+  const owner=document.getElementById('owner').value||'proprietário',bairro=document.getElementById('bairro').value||'bairro informado',city=document.getElementById('city').value,type=document.getElementById('type').value,dependency=document.getElementById('dependency')?.value||'nao';
+  document.getElementById('report').innerHTML=`<p>Para o imóvel de <strong>${owner}</strong>, localizado em <strong>${bairro}, ${city}</strong>, foram considerados <strong>${filtered.length} imóveis comparáveis</strong>. O imóvel avaliado é um <strong>${type.toLowerCase()}</strong> com <strong>${area} m²</strong>${dependency==='sim'?', com <strong>dependência</strong>':''}. A referência ponderada encontrada foi de <strong>R$ ${NUM.format(base)}/m²</strong>.</p><p>O valor central recomendado para este ${type.toLowerCase()} é <strong>${BRL.format(round5(market))}</strong>. Para maior liquidez, a estratégia indicada é próxima de <strong>${BRL.format(round5(quick))}</strong>. Para posicionamento superior, com maior margem de negociação e potencial aumento do prazo de venda, a referência é <strong>${BRL.format(round5(upper))}</strong>.</p><p>Esta ACM representa opinião mercadológica baseada em preços anunciados e características comparáveis. Não substitui laudo técnico formal quando este for legalmente exigido.</p>`;
   lastResult={base,quick:round5(quick),market:round5(market),upper:round5(upper),confidence,count:filtered.length,cv};
   return lastResult;
 }
 
 function getForm(){
- const ids=['owner','city','state','bairro','type','area','land','beds','suites','baths','parking','condition','condo','iptu','pool','sauna','features'];
+ const ids=['owner','city','state','bairro','type','area','land','beds','suites','baths','parking','condition','condo','iptu','pool','sauna','dependency','features'];
  const o={};ids.forEach(id=>o[id]=document.getElementById(id).value);return o;
 }
 function setForm(o={}){Object.entries(o).forEach(([k,v])=>{const el=document.getElementById(k);if(el)el.value=v})}
@@ -622,7 +639,7 @@ function saveACM(){
 }
 function newACM(){
  ['owner','bairro','features'].forEach(id=>document.getElementById(id).value='');
- document.getElementById('pool').value='nao';document.getElementById('sauna').value='nao';
+ document.getElementById('pool').value='nao';document.getElementById('sauna').value='nao';document.getElementById('dependency').value='nao';
  document.getElementById('area').value=100;document.getElementById('land').value=0;document.getElementById('beds').value=2;document.getElementById('suites').value=0;document.getElementById('baths').value=2;document.getElementById('parking').value=1;document.getElementById('condo').value=0;document.getElementById('iptu').value=0;
  rows=[];addRow();addRow();addRow();lastResult=null;
  ['quick','market','upper','statPPM','confidence'].forEach(id=>document.getElementById(id).textContent='—');document.getElementById('statCount').textContent='0';document.getElementById('report').textContent='O parecer será gerado após o cálculo.';
@@ -656,13 +673,13 @@ async function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
  const beds=document.getElementById('beds').value,area=document.getElementById('area').value,suites=document.getElementById('suites').value,parking=document.getElementById('parking').value;
  const condo=document.getElementById('condo').value,condition=document.getElementById('condition').selectedOptions?.[0]?.text||'',features=document.getElementById('features').value.trim();
- const pool=document.getElementById('pool')?.value||'nao',sauna=document.getElementById('sauna')?.value||'nao';
+ const pool=document.getElementById('pool')?.value||'nao',sauna=document.getElementById('sauna')?.value||'nao',dependency=document.getElementById('dependency')?.value||'nao';
  if(!city){alert('Cidade é obrigatória.');document.getElementById('city').focus();return}
  if(!bairro){alert('Bairro é obrigatório.');document.getElementById('bairro').focus();return}
- const extras=[suites?suites+' suítes':'',parking?parking+' vagas':'',pool==='sim'?'piscina':'',sauna==='sim'?'sauna':'',features].filter(Boolean).join(' ');
+ const extras=[suites?suites+' suítes':'',parking?parking+' vagas':'',pool==='sim'?'piscina':'',sauna==='sim'?'sauna':'',dependency==='sim'?'dependência':'',features].filter(Boolean).join(' ');
  const busca=`${type} à venda ${bairro} ${city} ${state} ${beds ? beds+' quartos' : ''} ${area ? area+' m²' : ''} ${extras}`.trim();
  const API=AYRO_API_URL;
- const params=new URLSearchParams({q:busca,cidade:city,bairro,tipo:type,area,quartos:beds,suites,vagas:parking,condominio:condo,conservacao:condition,piscina:pool,sauna,diferenciais:features});
+ const params=new URLSearchParams({q:busca,cidade:city,bairro,tipo:type,area,quartos:beds,suites,vagas:parking,condominio:condo,conservacao:condition,piscina:pool,sauna,diferenciais:[dependency==='sim'?'dependência':'',features].filter(Boolean).join(', ')});
  const status=document.getElementById('searchStatus'),results=document.getElementById('searchResults'),btn=document.getElementById('searchComparablesBtn');
  if(status){status.style.display='block';status.textContent='AYRO está buscando e classificando os imóveis mais semelhantes...';}
  if(results)results.innerHTML='';
