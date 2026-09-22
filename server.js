@@ -2380,4 +2380,1483 @@ function gerarReferencia(
       )
       .slice(0, 20)
   );
+}function adicionarDias(
+  dataBase,
+  dias
+) {
+  const d =
+    new Date(
+      dataBase ||
+      Date.now()
+    );
+
+  d.setUTCDate(
+    d.getUTCDate() +
+    dias
+  );
+
+  return d.toISOString();
 }
+
+/* ==========================================
+   CRIAR ASSINATURA CARTÃO
+========================================== */
+
+app.post(
+  '/api/mercadopago/criar-assinatura',
+  async (req, res) => {
+    try {
+      const {
+        email,
+        user_id
+      } = req.body || {};
+
+      if (!email) {
+        return res
+          .status(400)
+          .json({
+            erro:
+              'Informe o e-mail do cliente.'
+          });
+      }
+
+      const externalReference =
+        `AYRO-${crypto.randomUUID()}`;
+
+      const agora =
+        new Date().toISOString();
+
+      const criadas =
+        await supabaseRequest(
+          '/rest/v1/ayro_assinaturas',
+          {
+            method: 'POST',
+
+            body: JSON.stringify({
+              user_id:
+                user_id || null,
+
+              email,
+
+              plano:
+                'AYRO ACM Pro',
+
+              status:
+                'pending',
+
+              metodo_pagamento:
+                'cartao_assinatura',
+
+              external_reference:
+                externalReference,
+
+              valor:
+                49.90,
+
+              acesso_inicio:
+                null,
+
+              acesso_fim:
+                null,
+
+              proximo_pagamento:
+                null,
+
+              created_at:
+                agora,
+
+              updated_at:
+                agora
+            })
+          }
+        );
+
+      const assinatura =
+        await mpRequest(
+          '/preapproval',
+          {
+            method: 'POST',
+
+            body: JSON.stringify({
+              reason:
+                'AYRO ACM Pro',
+
+              external_reference:
+                externalReference,
+
+              payer_email:
+                email,
+
+              auto_recurring: {
+                frequency: 1,
+
+                frequency_type:
+                  'months',
+
+                transaction_amount:
+                  49.90,
+
+                currency_id:
+                  'BRL'
+              },
+
+              back_url:
+                'https://ayro-acm-api-prod.onrender.com',
+
+              status:
+                'pending'
+            })
+          }
+        );
+
+      const registro =
+        Array.isArray(criadas) &&
+        criadas.length
+          ? criadas[0]
+          : null;
+
+      if (registro?.id) {
+        await atualizarAssinatura(
+          registro.id,
+          {
+            mercado_pago_subscription_id:
+              String(
+                assinatura.id || ''
+              ),
+
+            status:
+              assinatura.status ||
+              'pending',
+
+            proximo_pagamento:
+              assinatura.next_payment_date ||
+              null
+          }
+        );
+      }
+
+      return res.json({
+        sucesso: true,
+
+        assinatura_id:
+          assinatura.id,
+
+        status:
+          assinatura.status,
+
+        checkout_url:
+          assinatura.init_point,
+
+        external_reference:
+          externalReference
+      });
+    } catch (erro) {
+      console.error(
+        'Erro ao criar assinatura:',
+        erro.dados || erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Erro interno ao criar assinatura.',
+
+          detalhe:
+            erro.dados ||
+            erro.message ||
+            String(erro)
+        });
+    }
+  }
+);
+
+/* ==========================================
+   CRIAR PAGAMENTO PIX
+========================================== */
+
+app.post(
+  '/api/mercadopago/criar-pix',
+  async (req, res) => {
+    try {
+      const {
+        email,
+        user_id,
+        nome
+      } = req.body || {};
+
+      if (!email) {
+        return res
+          .status(400)
+          .json({
+            erro:
+              'Informe o e-mail do cliente.'
+          });
+      }
+
+      const externalReference =
+        `AYRO-PIX-${crypto.randomUUID()}`;
+
+      const agora =
+        new Date().toISOString();
+
+      const criadas =
+        await supabaseRequest(
+          '/rest/v1/ayro_assinaturas',
+          {
+            method: 'POST',
+
+            body: JSON.stringify({
+              user_id:
+                user_id || null,
+
+              email,
+
+              plano:
+                'AYRO ACM Pro',
+
+              status:
+                'pending',
+
+              metodo_pagamento:
+                'pix',
+
+              external_reference:
+                externalReference,
+
+              valor:
+                49.90,
+
+              acesso_inicio:
+                null,
+
+              acesso_fim:
+                null,
+
+              proximo_pagamento:
+                null,
+
+              created_at:
+                agora,
+
+              updated_at:
+                agora
+            })
+          }
+        );
+
+      const idempotencyKey =
+        crypto.randomUUID();
+
+      const pagamento =
+        await mpRequest(
+          '/v1/payments',
+          {
+            method: 'POST',
+
+            headers: {
+              'X-Idempotency-Key':
+                idempotencyKey
+            },
+
+            body: JSON.stringify({
+              transaction_amount:
+                49.90,
+
+              description:
+                'AYRO ACM Pro - 30 dias',
+
+              payment_method_id:
+                'pix',
+
+              external_reference:
+                externalReference,
+
+              payer: {
+                email,
+
+                first_name:
+                  String(
+                    nome ||
+                    'Cliente AYRO'
+                  )
+                    .trim()
+                    .split(/\s+/)[0]
+              },
+
+              metadata: {
+                produto:
+                  'AYRO ACM Pro',
+
+                tipo:
+                  'pix_30_dias',
+
+                user_id:
+                  user_id || ''
+              }
+            })
+          }
+        );
+
+      const registro =
+        Array.isArray(criadas) &&
+        criadas.length
+          ? criadas[0]
+          : null;
+
+      if (registro?.id) {
+        await atualizarAssinatura(
+          registro.id,
+          {
+            mercado_pago_payment_id:
+              String(
+                pagamento.id || ''
+              ),
+
+            status:
+              pagamento.status ||
+              'pending'
+          }
+        );
+      }
+
+      const transacao =
+        pagamento
+          ?.point_of_interaction
+          ?.transaction_data ||
+        {};
+
+      return res.json({
+        sucesso: true,
+
+        payment_id:
+          pagamento.id,
+
+        status:
+          pagamento.status,
+
+        external_reference:
+          externalReference,
+
+        qr_code:
+          transacao.qr_code ||
+          null,
+
+        qr_code_base64:
+          transacao.qr_code_base64 ||
+          null,
+
+        ticket_url:
+          transacao.ticket_url ||
+          null
+      });
+    } catch (erro) {
+      console.error(
+        'Erro ao criar Pix:',
+        erro.dados || erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Não foi possível gerar o Pix.',
+
+          detalhe:
+            erro.dados ||
+            erro.message ||
+            String(erro)
+        });
+    }
+  }
+);
+
+/* ==========================================
+   CONSULTAR PAGAMENTO PIX
+========================================== */
+
+app.get(
+  '/api/mercadopago/pagamento/:id',
+  async (req, res) => {
+    try {
+      const id =
+        String(
+          req.params.id || ''
+        ).trim();
+
+      if (!id) {
+        return res
+          .status(400)
+          .json({
+            erro:
+              'ID do pagamento não informado.'
+          });
+      }
+
+      const pagamento =
+        await mpGet(
+          `/v1/payments/${encodeURIComponent(id)}`
+        );
+
+      return res.json({
+        sucesso: true,
+
+        id:
+          pagamento.id,
+
+        status:
+          pagamento.status,
+
+        status_detail:
+          pagamento.status_detail,
+
+        payment_method_id:
+          pagamento.payment_method_id,
+
+        external_reference:
+          pagamento.external_reference
+      });
+    } catch (erro) {
+      console.error(
+        'Erro ao consultar pagamento:',
+        erro.dados || erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Não foi possível consultar o pagamento.'
+        });
+    }
+  }
+);
+
+/* ==========================================
+   PROCESSAR PAGAMENTO
+========================================== */
+
+async function processarPagamento(
+  dataId
+) {
+  const pagamento =
+    await mpGet(
+      `/v1/payments/${encodeURIComponent(dataId)}`
+    );
+
+  const ref =
+    pagamento.external_reference;
+
+  if (!ref) {
+    console.log(
+      'Pagamento sem external_reference:',
+      pagamento.id
+    );
+
+    return;
+  }
+
+  const registro =
+    await buscarAssinaturaPorReferencia(
+      ref
+    );
+
+  if (!registro) {
+    console.log(
+      'Pagamento MP sem registro correspondente:',
+      pagamento.id
+    );
+
+    return;
+  }
+
+  const status =
+    String(
+      pagamento.status || ''
+    ).toLowerCase();
+
+  const metodo =
+    String(
+      pagamento.payment_method_id || ''
+    ).toLowerCase();
+
+  const valor =
+    Number(
+      pagamento.transaction_amount
+    );
+
+  if (
+    status === 'approved' &&
+    metodo === 'pix' &&
+    Math.abs(
+      valor - 49.90
+    ) < 0.01
+  ) {
+    if (
+      String(
+        registro.mercado_pago_payment_id ||
+        ''
+      ) ===
+        String(
+          pagamento.id ||
+          ''
+        ) &&
+      String(
+        registro.status ||
+        ''
+      ).toLowerCase() ===
+        'active'
+    ) {
+      console.log(
+        'Pix já processado anteriormente:',
+        pagamento.id
+      );
+
+      return;
+    }
+
+    const agora =
+      new Date();
+
+    const fimAtual =
+      registro.acesso_fim
+        ? new Date(
+            registro.acesso_fim
+          )
+        : null;
+
+    const base =
+      fimAtual &&
+      fimAtual > agora
+        ? fimAtual
+        : agora;
+
+    const acessoFim =
+      adicionarDias(
+        base,
+        30
+      );
+
+    await atualizarAssinatura(
+      registro.id,
+      {
+        status:
+          'active',
+
+        metodo_pagamento:
+          'pix',
+
+        mercado_pago_payment_id:
+          String(
+            pagamento.id || ''
+          ),
+
+        acesso_inicio:
+          registro.acesso_inicio ||
+          agora.toISOString(),
+
+        acesso_fim:
+          acessoFim,
+
+        proximo_pagamento:
+          null
+      }
+    );
+
+    if (registro.user_id) {
+      await atualizarProfile(
+        registro.user_id,
+        'active',
+        acessoFim
+      );
+    }
+
+    console.log(
+      'Pix aprovado. Acesso liberado por 30 dias:',
+      pagamento.id
+    );
+
+    return;
+  }
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        pagamento.status ||
+        registro.status,
+
+      mercado_pago_payment_id:
+        String(
+          pagamento.id || ''
+        ),
+
+      metodo_pagamento:
+        metodo ||
+        registro.metodo_pagamento ||
+        null
+    }
+  );
+}/* ==========================================
+   CONSULTAR ASSINATURA
+========================================== */
+
+app.get(
+  '/api/mercadopago/assinatura/:id',
+  async (req, res) => {
+    try {
+      const id = String(req.params.id || '').trim();
+
+      if (!id) {
+        return res.status(400).json({
+          erro: 'ID da assinatura não informado.'
+        });
+      }
+
+      const dados = await mpGet(
+        `/preapproval/${encodeURIComponent(id)}`
+      );
+
+      return res.json({
+        sucesso: true,
+        id: dados.id,
+        status: dados.status,
+        payer_email: dados.payer_email,
+        external_reference: dados.external_reference,
+        next_payment_date: dados.next_payment_date || null
+      });
+
+    } catch (erro) {
+      console.error(
+        'Erro ao consultar assinatura:',
+        erro.dados || erro
+      );
+
+      return res.status(500).json({
+        erro: 'Não foi possível consultar a assinatura.'
+      });
+    }
+  }
+);
+
+/* ==========================================
+   PROCESSAR ASSINATURA
+========================================== */
+
+async function processarPreapproval(dataId) {
+
+  const assinatura = await mpGet(
+    `/preapproval/${encodeURIComponent(dataId)}`
+  );
+
+  let registro =
+    await buscarAssinaturaPorReferencia(
+      assinatura.external_reference
+    );
+
+  if (!registro) {
+    registro =
+      await buscarAssinaturaPorSubscriptionId(
+        assinatura.id
+      );
+  }
+
+  if (!registro) {
+    console.log(
+      'Assinatura MP sem registro correspondente:',
+      assinatura.id
+    );
+
+    return;
+  }
+
+  const status =
+    String(
+      assinatura.status || ''
+    ).toLowerCase();
+
+  const ativa =
+    [
+      'authorized',
+      'active'
+    ].includes(status);
+
+  const encerrada =
+    [
+      'cancelled',
+      'canceled',
+      'paused'
+    ].includes(status);
+
+  const acessoInicio =
+    ativa
+      ? (
+          registro.acesso_inicio ||
+          new Date().toISOString()
+        )
+      : registro.acesso_inicio;
+
+  const acessoFim =
+    ativa
+      ? (
+          assinatura.next_payment_date ||
+          registro.acesso_fim ||
+          null
+        )
+      : registro.acesso_fim;
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        assinatura.status ||
+        registro.status,
+
+      metodo_pagamento:
+        'cartao_assinatura',
+
+      mercado_pago_subscription_id:
+        String(
+          assinatura.id || ''
+        ),
+
+      acesso_inicio:
+        acessoInicio || null,
+
+      acesso_fim:
+        acessoFim || null,
+
+      proximo_pagamento:
+        assinatura.next_payment_date ||
+        null
+    }
+  );
+
+  if (registro.user_id) {
+
+    if (ativa) {
+      await atualizarProfile(
+        registro.user_id,
+        'active',
+        acessoFim || null
+      );
+    }
+
+    if (encerrada) {
+      await atualizarProfile(
+        registro.user_id,
+        'inactive',
+        acessoFim || null
+      );
+    }
+  }
+}
+
+/* ==========================================
+   VALIDAÇÃO DO WEBHOOK MERCADO PAGO
+========================================== */
+
+function validarAssinaturaWebhook(req) {
+
+  const secret =
+    process.env.MP_WEBHOOK_SECRET;
+
+  if (!secret) {
+    console.error(
+      'MP_WEBHOOK_SECRET não configurado.'
+    );
+
+    return false;
+  }
+
+  const xSignature =
+    String(
+      req.headers['x-signature'] || ''
+    );
+
+  const xRequestId =
+    String(
+      req.headers['x-request-id'] || ''
+    );
+
+  if (!xSignature || !xRequestId) {
+    return false;
+  }
+
+  const partes = {};
+
+  for (
+    const parte of xSignature.split(',')
+  ) {
+
+    const [
+      chave,
+      ...resto
+    ] =
+      parte
+        .trim()
+        .split('=');
+
+    if (chave) {
+      partes[chave] =
+        resto.join('=');
+    }
+  }
+
+  const ts =
+    partes.ts;
+
+  const recebido =
+    partes.v1;
+
+  if (!ts || !recebido) {
+    return false;
+  }
+
+  const dataId =
+    String(
+      req.body?.data?.id ||
+      req.query?.['data.id'] ||
+      req.query?.id ||
+      ''
+    );
+
+  if (!dataId) {
+    return false;
+  }
+
+  const manifest =
+    `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+
+  const esperado =
+    crypto
+      .createHmac(
+        'sha256',
+        secret
+      )
+      .update(manifest)
+      .digest('hex');
+
+  try {
+
+    const a =
+      Buffer.from(
+        esperado,
+        'utf8'
+      );
+
+    const b =
+      Buffer.from(
+        recebido,
+        'utf8'
+      );
+
+    return (
+      a.length === b.length &&
+      crypto.timingSafeEqual(
+        a,
+        b
+      )
+    );
+
+  } catch {
+    return false;
+  }
+}
+
+/* ==========================================
+   WEBHOOK MERCADO PAGO
+========================================== */
+
+app.post(
+  '/api/mercadopago/webhook',
+  async (req, res) => {
+
+    try {
+
+      if (
+        !validarAssinaturaWebhook(req)
+      ) {
+
+        console.warn(
+          'Webhook Mercado Pago com assinatura inválida.'
+        );
+
+        return res
+          .status(401)
+          .json({
+            erro: 'Assinatura inválida.'
+          });
+      }
+
+      const body =
+        req.body || {};
+
+      const tipo =
+        String(
+          body.type ||
+          body.topic ||
+          ''
+        ).trim();
+
+      const dataId =
+        String(
+          body?.data?.id ||
+          body.id ||
+          ''
+        ).trim();
+
+      console.log(
+        'Webhook Mercado Pago:',
+        {
+          tipo,
+          dataId
+        }
+      );
+
+      res.sendStatus(200);
+
+      if (!dataId) {
+        console.log(
+          'Webhook recebido sem data.id.'
+        );
+
+        return;
+      }
+
+      if (
+        tipo ===
+          'subscription_preapproval' ||
+        tipo ===
+          'preapproval'
+      ) {
+
+        await processarPreapproval(
+          dataId
+        );
+
+        return;
+      }
+
+      if (
+        tipo === 'payment'
+      ) {
+
+        await processarPagamento(
+          dataId
+        );
+
+        return;
+      }
+
+      if (
+        tipo ===
+        'subscription_authorized_payment'
+      ) {
+
+        const fatura =
+          await mpGet(
+            `/authorized_payments/${encodeURIComponent(dataId)}`
+          );
+
+        if (
+          fatura.preapproval_id
+        ) {
+
+          await processarPreapproval(
+            fatura.preapproval_id
+          );
+        }
+
+        return;
+      }
+
+      console.log(
+        'Evento Mercado Pago não tratado:',
+        tipo,
+        dataId
+      );
+
+    } catch (erro) {
+
+      console.error(
+        'Erro ao processar webhook:',
+        erro.dados || erro
+      );
+
+      if (!res.headersSent) {
+
+        return res
+          .status(500)
+          .json({
+            erro:
+              'Erro ao processar webhook.'
+          });
+      }
+    }
+  }
+);
+
+/* ==========================================
+   ATIVAR CONTA APÓS PIX APROVADO
+========================================== */
+
+app.post(
+  '/api/ativar-conta-pix',
+  async (req, res) => {
+
+    try {
+
+      const email =
+        String(
+          req.body?.email || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      const password =
+        String(
+          req.body?.password || ''
+        );
+
+      const paymentId =
+        String(
+          req.body?.payment_id || ''
+        ).trim();
+
+      if (
+        !email ||
+        !paymentId
+      ) {
+
+        return res
+          .status(400)
+          .json({
+            erro:
+              'E-mail e pagamento são obrigatórios.'
+          });
+      }
+
+      if (
+        password.length < 6
+      ) {
+
+        return res
+          .status(400)
+          .json({
+            erro:
+              'A senha precisa ter pelo menos 6 caracteres.'
+          });
+      }
+
+      const pagamento =
+        await mpGet(
+          `/v1/payments/${encodeURIComponent(paymentId)}`
+        );
+
+      const status =
+        String(
+          pagamento?.status || ''
+        ).toLowerCase();
+
+      const metodo =
+        String(
+          pagamento?.payment_method_id ||
+          ''
+        ).toLowerCase();
+
+      const valor =
+        Number(
+          pagamento?.transaction_amount
+        );
+
+      const payerEmail =
+        String(
+          pagamento?.payer?.email || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      const ref =
+        String(
+          pagamento?.external_reference ||
+          ''
+        );
+
+      if (
+        status !== 'approved' ||
+        metodo !== 'pix' ||
+        Math.abs(
+          valor - 49.90
+        ) >= 0.01 ||
+        (
+          payerEmail &&
+          payerEmail !== email
+        )
+      ) {
+
+        return res
+          .status(403)
+          .json({
+            erro:
+              'Este Pix ainda não está aprovado para este e-mail.'
+          });
+      }
+
+      const registro =
+        await buscarAssinaturaPorReferencia(
+          ref
+        );
+
+      if (!registro) {
+
+        return res
+          .status(404)
+          .json({
+            erro:
+              'Pagamento aprovado, mas o registro da assinatura não foi encontrado.'
+          });
+      }
+
+      if (
+        String(
+          registro.email || ''
+        )
+          .trim()
+          .toLowerCase()
+          !== email
+      ) {
+
+        return res
+          .status(403)
+          .json({
+            erro:
+              'O e-mail informado não corresponde ao pagamento.'
+          });
+      }
+
+      if (
+        String(
+          registro.status || ''
+        ).toLowerCase()
+        !== 'active'
+      ) {
+
+        await processarPagamento(
+          paymentId
+        );
+      }
+
+      const registroAtual =
+        await buscarAssinaturaPorReferencia(
+          ref
+        );
+
+      const fim =
+        registroAtual?.acesso_fim
+          ? new Date(
+              registroAtual.acesso_fim
+            )
+          : null;
+
+      if (
+        String(
+          registroAtual?.status || ''
+        ).toLowerCase()
+          !== 'active' ||
+        !fim ||
+        fim <= new Date()
+      ) {
+
+        return res
+          .status(403)
+          .json({
+            erro:
+              'O pagamento foi localizado, mas o acesso ainda não está ativo. Aguarde alguns segundos e tente novamente.'
+          });
+      }
+
+      const user =
+        await criarOuAtualizarUsuarioAuth(
+          email,
+          password
+        );
+
+      if (!user?.id) {
+        throw new Error(
+          'Supabase não retornou o ID do usuário.'
+        );
+      }
+
+      await atualizarAssinatura(
+        registroAtual.id,
+        {
+          user_id:
+            user.id
+        }
+      );
+
+      await garantirProfileAtivo(
+        user.id,
+        email,
+        registroAtual.acesso_fim
+      );
+
+      return res.json({
+        sucesso: true,
+
+        email,
+
+        acesso_fim:
+          registroAtual.acesso_fim,
+
+        mensagem:
+          'Conta ativada. Você já pode entrar no AYRO ACM Pro.'
+      });
+
+    } catch (erro) {
+
+      console.error(
+        'Erro ao ativar conta Pix:',
+        erro.dados || erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Não foi possível criar a senha de acesso.',
+
+          detalhe:
+            erro?.dados?.msg ||
+            erro?.dados?.message ||
+            erro?.message ||
+            String(erro)
+        });
+    }
+  }
+);
+
+/* ==========================================
+   VERIFICAR ACESSO DO CLIENTE
+========================================== */
+
+app.get(
+  '/api/acesso/:email',
+  async (req, res) => {
+
+    try {
+
+      const email =
+        String(
+          req.params.email || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      if (!email) {
+
+        return res
+          .status(400)
+          .json({
+            ativo: false,
+            erro:
+              'E-mail não informado.'
+          });
+      }
+
+      const registro =
+        await buscarAssinaturaPorEmail(
+          email
+        );
+
+      if (!registro) {
+
+        return res.json({
+          ativo: false,
+          status:
+            'sem_assinatura'
+        });
+      }
+
+      const agora =
+        new Date();
+
+      const fim =
+        registro.acesso_fim
+          ? new Date(
+              registro.acesso_fim
+            )
+          : null;
+
+      const status =
+        String(
+          registro.status || ''
+        ).toLowerCase();
+
+      let ativo = false;
+
+      if (
+        registro.metodo_pagamento ===
+        'pix'
+      ) {
+
+        ativo =
+          status === 'active' &&
+          fim &&
+          fim > agora;
+
+      } else {
+
+        ativo =
+          [
+            'active',
+            'authorized',
+            'approved'
+          ].includes(status) &&
+          (
+            !fim ||
+            fim > agora
+          );
+      }
+
+      if (
+        registro.metodo_pagamento ===
+          'pix' &&
+        status === 'active' &&
+        fim &&
+        fim <= agora
+      ) {
+
+        await atualizarAssinatura(
+          registro.id,
+          {
+            status:
+              'expired'
+          }
+        );
+
+        if (
+          registro.user_id
+        ) {
+
+          await atualizarProfile(
+            registro.user_id,
+            'inactive',
+            registro.acesso_fim
+          );
+        }
+      }
+
+      return res.json({
+        ativo,
+
+        status:
+          ativo
+            ? 'active'
+            : (
+                fim &&
+                fim <= agora
+                  ? 'expired'
+                  : status
+              ),
+
+        plano:
+          registro.plano ||
+          'AYRO ACM Pro',
+
+        metodo_pagamento:
+          registro.metodo_pagamento ||
+          null,
+
+        acesso_inicio:
+          registro.acesso_inicio ||
+          null,
+
+        acesso_fim:
+          registro.acesso_fim ||
+          null
+      });
+
+    } catch (erro) {
+
+      console.error(
+        'Erro ao verificar acesso:',
+        erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          ativo: false,
+
+          erro:
+            'Não foi possível verificar o acesso.'
+        });
+    }
+  }
+);
+
+/* ==========================================
+   ROTA PRINCIPAL
+========================================== */
+
+app.get(
+  '/',
+  (req, res) => {
+
+    res.json({
+      ok: true,
+
+      sistema:
+        'AYRO ACM Pro',
+
+      api:
+        'online',
+
+      versao:
+        'PRECISAO-V12-MP',
+
+      pagamento: {
+        cartao:
+          'R$ 49,90/mês',
+
+        pix:
+          'R$ 49,90 / 30 dias'
+      }
+    });
+  }
+);
+
+/* ==========================================
+   INICIAR SERVIDOR
+========================================== */
+
+const PORT =
+  process.env.PORT ||
+  3000;
+
+if (
+  require.main === module
+) {
+
+  app.listen(
+    PORT,
+    () => {
+
+      console.log(
+        `AYRO ACM API PRECISAO-V12-MP rodando na porta ${PORT}`
+      );
+    }
+  );
+}
+
+module.exports = {
+  app,
+  dadosDaBusca,
+  dadosDaUrl,
+  ehLinkIndividual,
+  extrairDaPagina,
+  avaliarItem,
+  calcularAvaliacao
+};
