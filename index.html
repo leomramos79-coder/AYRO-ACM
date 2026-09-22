@@ -707,37 +707,66 @@ async function restoreAyroSession(){
   const client=initAyroSupabase();
   if(!client) return;
 
-  const hash=window.location.hash||'';
-  const params=new URLSearchParams(window.location.search||'');
-  const recoveryLink=hash.includes('type=recovery')||params.has('code');
-
-  // Nunca encerra a sessão criada pelo link de recuperação do Supabase.
-  if(recoveryLink){
-    document.getElementById('appScreen').classList.add('hidden');
-    document.getElementById('loginScreen').classList.remove('hidden');
-    setTimeout(openRecoveryMode,150);
-    return;
-  }
-
-  try{ await client.auth.signOut(); }catch(err){ console.error('AYRO sessão:',err); }
-  localStorage.removeItem('ayro_user');
-  localStorage.removeItem('ayro_profile');
   document.getElementById('appScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
+
+  const hash=window.location.hash||'';
+  const params=new URLSearchParams(window.location.search||'');
+  const code=params.get('code');
+  const recoveryLink=
+    hash.includes('type=recovery') ||
+    hash.includes('access_token=') ||
+    !!code;
+
+  try{
+    // Links PKCE podem chegar com ?code=. Garante que o código seja
+    // convertido em sessão antes de mostrar o formulário de nova senha.
+    if(code && typeof client.auth.exchangeCodeForSession==='function'){
+      const {error}=await client.auth.exchangeCodeForSession(code);
+      if(error) console.warn('AYRO recovery code:',error.message||error);
+    }
+
+    const {data}=await client.auth.getSession();
+    const recoverySession=!!data?.session;
+
+    // O AYRO não mantém login automático entre carregamentos. Portanto,
+    // uma sessão recebida ao abrir esta página é a sessão temporária do
+    // link de recuperação/criação de senha enviado por e-mail.
+    if(recoveryLink || recoverySession){
+      openRecoveryMode();
+      return;
+    }
+
+    await client.auth.signOut();
+  }catch(err){
+    console.error('AYRO sessão:',err);
+  }
+
+  localStorage.removeItem('ayro_user');
+  localStorage.removeItem('ayro_profile');
 }
 
 (function setupAyroRecovery(){
   const client=initAyroSupabase();
   if(!client) return;
 
-  client.auth.onAuthStateChange((event)=>{
-    if(event==='PASSWORD_RECOVERY') openRecoveryMode();
+  client.auth.onAuthStateChange((event,session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      openRecoveryMode();
+      return;
+    }
+
+    // Em alguns links o Supabase conclui a troca do código e dispara
+    // SIGNED_IN em vez de PASSWORD_RECOVERY.
+    if(event==='SIGNED_IN' && session && !document.getElementById('appScreen').classList.contains('hidden')){
+      return;
+    }
   });
 
   const hash=window.location.hash||'';
   const params=new URLSearchParams(window.location.search||'');
-  if(hash.includes('type=recovery')||params.has('code')){
-    setTimeout(openRecoveryMode,150);
+  if(hash.includes('type=recovery')||hash.includes('access_token=')||params.has('code')){
+    setTimeout(openRecoveryMode,50);
   }
 })();
 
