@@ -1796,4 +1796,588 @@ app.get(
             'Erro interno na pesquisa.',
 
           detalhe:
-            e.message ||
+            e.message ||                String(e)
+        });
+    }
+  }
+);
+
+/* ==========================================
+   MERCADO PAGO / ASSINATURAS
+========================================== */
+
+function mpToken() {
+  return String(
+    process.env.MP_ACCESS_TOKEN || ''
+  ).trim();
+}
+
+function supabaseUrl() {
+  return String(
+    process.env.SUPABASE_URL || ''
+  )
+    .trim()
+    .replace(/\/$/, '');
+}
+
+function supabaseSecret() {
+  return String(
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    ''
+  ).trim();
+}
+
+async function mpGet(path) {
+  const token = mpToken();
+
+  if (!token) {
+    throw new Error(
+      'MP_ACCESS_TOKEN não configurado.'
+    );
+  }
+
+  const resposta = await fetch(
+    `https://api.mercadopago.com${path}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type':
+          'application/json'
+      }
+    }
+  );
+
+  const texto =
+    await resposta.text();
+
+  let dados = null;
+
+  try {
+    dados =
+      texto
+        ? JSON.parse(texto)
+        : null;
+  } catch {
+    dados = texto;
+  }
+
+  if (!resposta.ok) {
+    const erro =
+      new Error(
+        `Mercado Pago HTTP ${resposta.status}`
+      );
+
+    erro.status =
+      resposta.status;
+
+    erro.dados =
+      dados;
+
+    throw erro;
+  }
+
+  return dados;
+}
+
+async function mpPost(
+  path,
+  body,
+  idempotencyKey = ''
+) {
+  const token = mpToken();
+
+  if (!token) {
+    throw new Error(
+      'MP_ACCESS_TOKEN não configurado.'
+    );
+  }
+
+  const headers = {
+    Authorization:
+      `Bearer ${token}`,
+
+    'Content-Type':
+      'application/json'
+  };
+
+  if (idempotencyKey) {
+    headers[
+      'X-Idempotency-Key'
+    ] = idempotencyKey;
+  }
+
+  const resposta =
+    await fetch(
+      `https://api.mercadopago.com${path}`,
+      {
+        method: 'POST',
+        headers,
+        body:
+          JSON.stringify(body)
+      }
+    );
+
+  const texto =
+    await resposta.text();
+
+  let dados = null;
+
+  try {
+    dados =
+      texto
+        ? JSON.parse(texto)
+        : null;
+  } catch {
+    dados = texto;
+  }
+
+  if (!resposta.ok) {
+    const erro =
+      new Error(
+        `Mercado Pago HTTP ${resposta.status}`
+      );
+
+    erro.status =
+      resposta.status;
+
+    erro.dados =
+      dados;
+
+    throw erro;
+  }
+
+  return dados;
+}
+
+async function supabaseRequest(
+  path,
+  options = {}
+) {
+  const url =
+    supabaseUrl();
+
+  const secret =
+    supabaseSecret();
+
+  if (
+    !url ||
+    !secret
+  ) {
+    throw new Error(
+      'Supabase não configurado.'
+    );
+  }
+
+  const resposta =
+    await fetch(
+      `${url}${path}`,
+      {
+        ...options,
+
+        headers: {
+          apikey:
+            secret,
+
+          Authorization:
+            `Bearer ${secret}`,
+
+          'Content-Type':
+            'application/json',
+
+          ...(options.headers || {})
+        }
+      }
+    );
+
+  const texto =
+    await resposta.text();
+
+  let dados = null;
+
+  try {
+    dados =
+      texto
+        ? JSON.parse(texto)
+        : null;
+  } catch {
+    dados = texto;
+  }
+
+  if (!resposta.ok) {
+    const erro =
+      new Error(
+        `Supabase HTTP ${resposta.status}`
+      );
+
+    erro.status =
+      resposta.status;
+
+    erro.dados =
+      dados;
+
+    throw erro;
+  }
+
+  return dados;
+}
+
+/* ==========================================
+   SUPABASE AUTH
+========================================== */
+
+async function supabaseAuthRequest(
+  path,
+  options = {}
+) {
+  const url =
+    supabaseUrl();
+
+  const secret =
+    supabaseSecret();
+
+  if (
+    !url ||
+    !secret
+  ) {
+    throw new Error(
+      'Supabase não configurado.'
+    );
+  }
+
+  const resposta =
+    await fetch(
+      `${url}${path}`,
+      {
+        ...options,
+
+        headers: {
+          apikey:
+            secret,
+
+          Authorization:
+            `Bearer ${secret}`,
+
+          'Content-Type':
+            'application/json',
+
+          ...(options.headers || {})
+        }
+      }
+    );
+
+  const texto =
+    await resposta.text();
+
+  let dados = null;
+
+  try {
+    dados =
+      texto
+        ? JSON.parse(texto)
+        : null;
+  } catch {
+    dados = texto;
+  }
+
+  if (!resposta.ok) {
+    const erro =
+      new Error(
+        `Supabase Auth HTTP ${resposta.status}`
+      );
+
+    erro.status =
+      resposta.status;
+
+    erro.dados =
+      dados;
+
+    throw erro;
+  }
+
+  return dados;
+}
+
+async function buscarUsuarioAuthPorEmail(
+  email
+) {
+  const alvo =
+    String(email || '')
+      .trim()
+      .toLowerCase();
+
+  if (!alvo) {
+    return null;
+  }
+
+  const dados =
+    await supabaseAuthRequest(
+      '/auth/v1/admin/users?page=1&per_page=1000',
+      {
+        method: 'GET'
+      }
+    );
+
+  const users =
+    Array.isArray(dados)
+      ? dados
+      : (
+          Array.isArray(
+            dados?.users
+          )
+            ? dados.users
+            : []
+        );
+
+  return (
+    users.find(
+      u =>
+        String(
+          u?.email || ''
+        )
+          .trim()
+          .toLowerCase() ===
+        alvo
+    ) || null
+  );
+}
+
+async function criarOuAtualizarUsuarioAuth(
+  email,
+  password
+) {
+  let user =
+    await buscarUsuarioAuthPorEmail(
+      email
+    );
+
+  if (user?.id) {
+    const atualizado =
+      await supabaseAuthRequest(
+        `/auth/v1/admin/users/${encodeURIComponent(user.id)}`,
+        {
+          method: 'PUT',
+
+          body:
+            JSON.stringify({
+              password,
+              email_confirm: true
+            })
+        }
+      );
+
+    return (
+      atualizado?.user ||
+      atualizado ||
+      user
+    );
+  }
+
+  const criado =
+    await supabaseAuthRequest(
+      '/auth/v1/admin/users',
+      {
+        method: 'POST',
+
+        body:
+          JSON.stringify({
+            email,
+            password,
+            email_confirm: true,
+
+            user_metadata: {
+              app:
+                'AYRO ACM Pro'
+            }
+          })
+      }
+    );
+
+  return (
+    criado?.user ||
+    criado
+  );
+}
+
+async function garantirProfileAtivo(
+  userId,
+  email,
+  acessoFim
+) {
+  if (!userId) {
+    return null;
+  }
+
+  const rows =
+    await supabaseRequest(
+      '/rest/v1/profiles?on_conflict=id',
+      {
+        method: 'POST',
+
+        headers: {
+          Prefer:
+            'resolution=merge-duplicates,return=representation'
+        },
+
+        body:
+          JSON.stringify({
+            id:
+              userId,
+
+            email,
+
+            subscription_status:
+              'active',
+
+            subscription_end:
+              acessoFim
+          })
+      }
+    );
+
+  return (
+    Array.isArray(rows) &&
+    rows.length
+      ? rows[0]
+      : null
+  );
+}
+
+async function buscarAssinaturaPorReferencia(
+  referencia
+) {
+  if (!referencia) {
+    return null;
+  }
+
+  const path =
+    '/rest/v1/assinaturas' +
+    `?external_reference=eq.${encodeURIComponent(referencia)}` +
+    '&select=*' +
+    '&limit=1';
+
+  const dados =
+    await supabaseRequest(
+      path,
+      {
+        method: 'GET'
+      }
+    );
+
+  return (
+    Array.isArray(dados) &&
+    dados.length
+      ? dados[0]
+      : null
+  );
+}
+
+async function buscarAssinaturaPorEmail(
+  email
+) {
+  if (!email) {
+    return null;
+  }
+
+  const path =
+    '/rest/v1/assinaturas' +
+    `?email=eq.${encodeURIComponent(email)}` +
+    '&select=*' +
+    '&order=created_at.desc' +
+    '&limit=1';
+
+  const dados =
+    await supabaseRequest(
+      path,
+      {
+        method: 'GET'
+      }
+    );
+
+  return (
+    Array.isArray(dados) &&
+    dados.length
+      ? dados[0]
+      : null
+  );
+}
+
+async function atualizarAssinatura(
+  id,
+  dados
+) {
+  if (!id) {
+    throw new Error(
+      'ID da assinatura não informado.'
+    );
+  }
+
+  const path =
+    '/rest/v1/assinaturas' +
+    `?id=eq.${encodeURIComponent(id)}`;
+
+  const resposta =
+    await supabaseRequest(
+      path,
+      {
+        method: 'PATCH',
+
+        headers: {
+          Prefer:
+            'return=representation'
+        },
+
+        body:
+          JSON.stringify(dados)
+      }
+    );
+
+  return resposta;
+}
+
+async function criarRegistroAssinatura(
+  dados
+) {
+  const resposta =
+    await supabaseRequest(
+      '/rest/v1/assinaturas',
+      {
+        method: 'POST',
+
+        headers: {
+          Prefer:
+            'return=representation'
+        },
+
+        body:
+          JSON.stringify(dados)
+      }
+    );
+
+  return (
+    Array.isArray(resposta) &&
+    resposta.length
+      ? resposta[0]
+      : resposta
+  );
+}
+
+function gerarReferencia(
+  email
+) {
+  const hash =
+    crypto
+      .randomBytes(8)
+      .toString('hex');
+
+  return (
+    `ayro_${Date.now()}_${hash}_` +
+    String(email || '')
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9]/g,
+        ''
+      )
+      .slice(0, 20)
+  );
+}
