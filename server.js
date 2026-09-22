@@ -61,7 +61,9 @@ function numeroBR(v) {
 }
 
 function mediana(a) {
-  const v = a.filter(Number.isFinite).sort((x, y) => x - y);
+  const v = a
+    .filter(Number.isFinite)
+    .sort((x, y) => x - y);
 
   if (!v.length) return null;
 
@@ -132,23 +134,28 @@ function dadosDaBusca(q, params = {}) {
   return {
     tipo,
 
-    cidade: String(params.cidade || '').trim(),
+    cidade:
+      String(params.cidade || '').trim(),
 
-    bairro: String(params.bairro || '').trim(),
+    bairro:
+      String(params.bairro || '').trim(),
 
     quartos:
       num(params.quartos) ??
       (qm ? Number(qm[1]) : null),
 
-    suites: num(params.suites),
+    suites:
+      num(params.suites),
 
-    vagas: num(params.vagas),
+    vagas:
+      num(params.vagas),
 
     area:
       num(params.area) ??
       (am ? numeroBR(am[1]) : null),
 
-    condominio: num(params.condominio),
+    condominio:
+      num(params.condominio),
 
     conservacao:
       String(params.conservacao || '').trim(),
@@ -188,14 +195,20 @@ function dadosDaUrl(link = '') {
   );
 
   return {
-    quartos: q ? Number(q[1]) : null,
-    area: a ? numeroBR(a[1]) : null,
-    preco: p ? numeroBR(p[1]) : null
+    quartos:
+      q ? Number(q[1]) : null,
+
+    area:
+      a ? numeroBR(a[1]) : null,
+
+    preco:
+      p ? numeroBR(p[1]) : null
   };
 }
 
 function ehLinkIndividual(link = '') {
-  const l = String(link || '').toLowerCase();
+  const l =
+    String(link || '').toLowerCase();
 
   if (!l) return false;
 
@@ -332,8 +345,11 @@ function extrairAtributos(texto = '') {
     100000
   );
 
-  const piscina = /\bpiscina\b/.test(t);
-  const sauna = /\bsauna\b/.test(t);
+  const piscina =
+    /\bpiscina\b/.test(t);
+
+  const sauna =
+    /\bsauna\b/.test(t);
 
   let conservacao = '';
 
@@ -417,9 +433,12 @@ function extrairJsonLd(html) {
   const re =
     /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 
-  let m;  while ((m = re.exec(html))) {
+  let m;
+
+  while ((m = re.exec(html))) {
     try {
-      const x = JSON.parse(m[1].trim());
+      const x =
+        JSON.parse(m[1].trim());
 
       dados.push(
         ...(Array.isArray(x) ? x : [x])
@@ -430,7 +449,11 @@ function extrairJsonLd(html) {
   return dados;
 }
 
-function caminhar(obj, fn, depth = 0) {
+function caminhar(
+  obj,
+  fn,
+  depth = 0
+) {
   if (
     obj == null ||
     depth > 7
@@ -461,9 +484,7 @@ function caminhar(obj, fn, depth = 0) {
       )
     );
   }
-}
-
-function extrairDaPagina(html, busca) {
+}function extrairDaPagina(html, busca) {
   const clean =
     String(html || '')
       .replace(
@@ -499,9 +520,14 @@ function extrairDaPagina(html, busca) {
         ' '
       );
 
-  const precos = precosNoTexto(clean);
-  const areas = areasNoTexto(clean);
-  const quartos = quartosNoTexto(clean);
+  const precos =
+    precosNoTexto(clean);
+
+  const areas =
+    areasNoTexto(clean);
+
+  const quartos =
+    quartosNoTexto(clean);
 
   const structured = {
     precos: [],
@@ -543,7 +569,8 @@ function extrairDaPagina(html, busca) {
                   )
                 : v;
 
-            const n = numeroBR(val);
+            const n =
+              numeroBR(val);
 
             if (
               Number.isFinite(n) &&
@@ -557,7 +584,8 @@ function extrairDaPagina(html, busca) {
           if (
             /numberOfRooms|numberOfBedrooms|bedrooms/i.test(k)
           ) {
-            const n = Number(v);
+            const n =
+              Number(v);
 
             if (
               Number.isFinite(n) &&
@@ -699,8 +727,10 @@ async function enriquecerPagina(
       ...item,
       _pagina: p
     };
+
   } catch {
     return item;
+
   } finally {
     clearTimeout(timer);
   }
@@ -796,18 +826,25 @@ function avaliarItem(
   const motivos = [];
 
   if (!ehLinkIndividual(link)) {
-    motivos.push('link não é anúncio individual');
+    motivos.push(
+      'link não é anúncio individual'
+    );
   }
 
   if (!Number.isFinite(preco)) {
-    motivos.push('sem preço identificado');
+    motivos.push(
+      'sem preço identificado'
+    );
   }
 
   if (!Number.isFinite(area)) {
-    motivos.push('sem área identificada');
+    motivos.push(
+      'sem área identificada'
+    );
   }
 
-  const nt = norm(full);
+  const nt =
+    norm(full);
 
   const temApto =
     /apartamento|\bapto\b|flat|studio/.test(nt);
@@ -823,18 +860,30 @@ function avaliarItem(
         : true;
 
   if (!tipoConfere) {
-    motivos.push('tipo de imóvel divergente');
+    motivos.push(
+      'tipo de imóvel divergente'
+    );
   }
 
   let diferencaArea = null;
 
-  if (busca.area && area) {
+  if (
+    busca.area &&
+    area
+  ) {
     diferencaArea =
-      Math.abs(area - busca.area) /
+      Math.abs(
+        area - busca.area
+      ) /
       busca.area;
 
-    if (diferencaArea > TOLERANCIA_AREA) {
-      motivos.push('área fora da faixa');
+    if (
+      diferencaArea >
+      TOLERANCIA_AREA
+    ) {
+      motivos.push(
+        'área fora da faixa'
+      );
     }
   }
 
@@ -848,16 +897,28 @@ function avaliarItem(
 
   const bairroOk =
     busca.bairro
-      ? contemTermo(full, busca.bairro)
+      ? contemTermo(
+          full,
+          busca.bairro
+        )
       : true;
 
-  detalhes.bairro = bairroOk ? 25 : 0;
-  score += detalhes.bairro;
+  detalhes.bairro =
+    bairroOk ? 25 : 0;
 
-  detalhes.tipo = tipoConfere ? 15 : 0;
-  score += detalhes.tipo;
+  score +=
+    detalhes.bairro;
 
-  if (busca.area && area) {
+  detalhes.tipo =
+    tipoConfere ? 15 : 0;
+
+  score +=
+    detalhes.tipo;
+
+  if (
+    busca.area &&
+    area
+  ) {
     detalhes.area =
       scoreProximidadeNumero(
         busca.area,
@@ -869,7 +930,8 @@ function avaliarItem(
     detalhes.area = 0;
   }
 
-  score += detalhes.area;
+  score +=
+    detalhes.area;
 
   if (
     Number.isFinite(busca.quartos) &&
@@ -878,8 +940,12 @@ function avaliarItem(
     const melhorQuarto =
       [...quartos].sort(
         (a, b) =>
-          Math.abs(a - busca.quartos) -
-          Math.abs(b - busca.quartos)
+          Math.abs(
+            a - busca.quartos
+          ) -
+          Math.abs(
+            b - busca.quartos
+          )
       )[0];
 
     detalhes.quartos =
@@ -916,7 +982,9 @@ function avaliarItem(
     detalhes.quartos +
     detalhes.suites;
 
-  if (busca.conservacao) {
+  if (
+    busca.conservacao
+  ) {
     detalhes.conservacao =
       conservacao &&
       contemTermo(
@@ -929,7 +997,8 @@ function avaliarItem(
     detalhes.conservacao = 0;
   }
 
-  score += detalhes.conservacao;
+  score +=
+    detalhes.conservacao;
 
   if (
     Number.isFinite(busca.vagas) &&
@@ -948,7 +1017,8 @@ function avaliarItem(
     detalhes.vagas = 0;
   }
 
-  score += detalhes.vagas;
+  score +=
+    detalhes.vagas;
 
   if (
     Number.isFinite(busca.condominio) &&
@@ -965,21 +1035,27 @@ function avaliarItem(
     detalhes.condominio = 0;
   }
 
-  score += detalhes.condominio;
+  score +=
+    detalhes.condominio;
 
   detalhes.lazer = 0;
 
-  if (busca.piscina) {
+  if (
+    busca.piscina
+  ) {
     detalhes.lazer +=
       piscina ? 1.5 : 0;
   }
 
-  if (busca.sauna) {
+  if (
+    busca.sauna
+  ) {
     detalhes.lazer +=
       sauna ? 1.5 : 0;
   }
 
-  score += detalhes.lazer;
+  score +=
+    detalhes.lazer;
 
   detalhes.diferenciais =
     busca.diferenciais &&
@@ -990,12 +1066,16 @@ function avaliarItem(
       ? 3
       : 0;
 
-  score += detalhes.diferenciais;
+  score +=
+    detalhes.diferenciais;
 
   score =
     Math.max(
       0,
-      Math.min(100, score)
+      Math.min(
+        100,
+        score
+      )
     );
 
   const comparavelValido =
@@ -1007,13 +1087,17 @@ function avaliarItem(
   return {
     titulo,
     descricao,
-    link: normalizarLink(link),
+
+    link:
+      normalizarLink(link),
 
     fonte:
       item.source ||
       (() => {
         try {
-          return new URL(link).hostname;
+          return new URL(
+            link
+          ).hostname;
         } catch {
           return '';
         }
@@ -1034,25 +1118,31 @@ function avaliarItem(
     sauna,
     conservacao,
 
-    preco_m2: precoM2,
+    preco_m2:
+      precoM2,
 
     score_similaridade:
-      Math.round(score * 10) / 10,
+      Math.round(
+        score * 10
+      ) / 10,
 
-    detalhes_score: detalhes,
+    detalhes_score:
+      detalhes,
 
     comparavel_valido:
       comparavelValido,
 
-    motivos_exclusao: motivos,
+    motivos_exclusao:
+      motivos,
 
     diferenca_area:
       diferencaArea
   };
-}function removerOutliers(
+}
+
+function removerOutliers(
   comparaveis
-) {
-  if (
+) {  if (
     !Array.isArray(comparaveis) ||
     comparaveis.length < 5
   ) {
@@ -1637,15 +1727,13 @@ app.get(
             }
           }
         } catch (e) {
-          errosBusca.push(
-            {
-              consulta,
+          errosBusca.push({
+            consulta,
 
-              erro:
-                e.message ||
-                String(e)
-            }
-          );
+            erro:
+              e.message ||
+              String(e)
+          });
         }
       }
 
@@ -1700,9 +1788,7 @@ app.get(
                 busca
               )
           )
-      ];
-
-      const comparaveis =
+      ];      const comparaveis =
         processados
           .filter(
             x =>
@@ -1767,7 +1853,8 @@ app.get(
 
         avaliacao,
 
-        erros_busca: errosBusca,
+        erros_busca:
+          errosBusca,
 
         resultados: [
           ...comparaveis,
@@ -1783,6 +1870,7 @@ app.get(
       res.json(
         payload
       );
+
     } catch (e) {
       console.error(
         'ERRO AYRO:',
@@ -1796,150 +1884,103 @@ app.get(
             'Erro interno na pesquisa.',
 
           detalhe:
-            e.message ||                String(e)
+            e.message ||
+            String(e),
+
+          versao:
+            'PRECISAO-V12-MP'
         });
     }
   }
 );
 
 /* ==========================================
-   MERCADO PAGO / ASSINATURAS
+   AYRO ACM PRO
+   MERCADO PAGO + SUPABASE
 ========================================== */
 
-function mpToken() {
-  return String(
-    process.env.MP_ACCESS_TOKEN || ''
-  ).trim();
-}
+const mpAccessToken =
+  () =>
+    process.env.MP_ACCESS_TOKEN ||
+    '';
 
-function supabaseUrl() {
-  return String(
-    process.env.SUPABASE_URL || ''
-  )
-    .trim()
-    .replace(/\/$/, '');
-}
+const supabaseUrl =
+  () =>
+    String(
+      process.env.SUPABASE_URL ||
+      ''
+    ).replace(/\/$/, '');
 
-function supabaseSecret() {
-  return String(
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    ''
-  ).trim();
-}
+const supabaseSecret =
+  () =>
+    process.env.SUPABASE_SECRET_KEY ||
+    '';
 
-async function mpGet(path) {
-  const token = mpToken();
+/* ==========================================
+   DIAGNÓSTICO SEGURO DE CONFIGURAÇÃO
+   Não mostra nenhuma senha ou token
+========================================== */
 
-  if (!token) {
-    throw new Error(
-      'MP_ACCESS_TOKEN não configurado.'
-    );
+console.log(
+  'AYRO CONFIG CHECK:',
+  {
+    SUPABASE_URL:
+      !!process.env.SUPABASE_URL,
+
+    SUPABASE_SECRET_KEY:
+      !!process.env.SUPABASE_SECRET_KEY,
+
+    MP_ACCESS_TOKEN:
+      !!process.env.MP_ACCESS_TOKEN,
+
+    MP_WEBHOOK_SECRET:
+      !!process.env.MP_WEBHOOK_SECRET
   }
+);
 
-  const resposta = await fetch(
-    `https://api.mercadopago.com${path}`,
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type':
-          'application/json'
-      }
-    }
-  );
-
-  const texto =
-    await resposta.text();
-
-  let dados = null;
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : null;
-  } catch {
-    dados = texto;
-  }
-
-  if (!resposta.ok) {
-    const erro =
-      new Error(
-        `Mercado Pago HTTP ${resposta.status}`
-      );
-
-    erro.status =
-      resposta.status;
-
-    erro.dados =
-      dados;
-
-    throw erro;
-  }
-
-  return dados;
-}
-
-async function mpPost(
+async function mpRequest(
   path,
-  body,
-  idempotencyKey = ''
+  options = {}
 ) {
-  const token = mpToken();
+  const token =
+    mpAccessToken();
 
   if (!token) {
     throw new Error(
       'MP_ACCESS_TOKEN não configurado.'
     );
-  }
-
-  const headers = {
-    Authorization:
-      `Bearer ${token}`,
-
-    'Content-Type':
-      'application/json'
-  };
-
-  if (idempotencyKey) {
-    headers[
-      'X-Idempotency-Key'
-    ] = idempotencyKey;
   }
 
   const resposta =
     await fetch(
       `https://api.mercadopago.com${path}`,
       {
-        method: 'POST',
-        headers,
-        body:
-          JSON.stringify(body)
+        ...options,
+
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+
+          'Content-Type':
+            'application/json',
+
+          ...(options.headers || {})
+        }
       }
     );
 
-  const texto =
-    await resposta.text();
-
-  let dados = null;
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : null;
-  } catch {
-    dados = texto;
-  }
+  const dados =
+    await resposta
+      .json()
+      .catch(
+        () => ({})
+      );
 
   if (!resposta.ok) {
     const erro =
       new Error(
         `Mercado Pago HTTP ${resposta.status}`
       );
-
-    erro.status =
-      resposta.status;
 
     erro.dados =
       dados;
@@ -1948,6 +1989,15 @@ async function mpPost(
   }
 
   return dados;
+}
+
+async function mpGet(path) {
+  return mpRequest(
+    path,
+    {
+      method: 'GET'
+    }
+  );
 }
 
 async function supabaseRequest(
@@ -1959,6 +2009,15 @@ async function supabaseRequest(
 
   const secret =
     supabaseSecret();
+
+  /* Diagnóstico adicional dentro da conexão */
+  console.log(
+    'SUPABASE REQUEST CHECK:',
+    {
+      url: !!url,
+      secret: !!secret
+    }
+  );
 
   if (
     !url ||
@@ -1985,6 +2044,9 @@ async function supabaseRequest(
           'Content-Type':
             'application/json',
 
+          Prefer:
+            'return=representation',
+
           ...(options.headers || {})
         }
       }
@@ -2010,9 +2072,6 @@ async function supabaseRequest(
         `Supabase HTTP ${resposta.status}`
       );
 
-    erro.status =
-      resposta.status;
-
     erro.dados =
       dados;
 
@@ -2021,10 +2080,6 @@ async function supabaseRequest(
 
   return dados;
 }
-
-/* ==========================================
-   SUPABASE AUTH
-========================================== */
 
 async function supabaseAuthRequest(
   path,
@@ -2122,9 +2177,7 @@ async function buscarUsuarioAuthPorEmail(
     Array.isArray(dados)
       ? dados
       : (
-          Array.isArray(
-            dados?.users
-          )
+          Array.isArray(dados?.users)
             ? dados.users
             : []
         );
@@ -2132,12 +2185,9 @@ async function buscarUsuarioAuthPorEmail(
   return (
     users.find(
       u =>
-        String(
-          u?.email || ''
-        )
+        String(u?.email || '')
           .trim()
-          .toLowerCase() ===
-        alvo
+          .toLowerCase() === alvo
     ) || null
   );
 }
@@ -2244,30 +2294,47 @@ async function garantirProfileAtivo(
 }
 
 async function buscarAssinaturaPorReferencia(
-  referencia
+  externalReference
 ) {
-  if (!referencia) {
+  if (!externalReference) {
     return null;
   }
 
-  const path =
-    '/rest/v1/assinaturas' +
-    `?external_reference=eq.${encodeURIComponent(referencia)}` +
-    '&select=*' +
-    '&limit=1';
-
-  const dados =
+  const rows =
     await supabaseRequest(
-      path,
+      `/rest/v1/ayro_assinaturas?external_reference=eq.${encodeURIComponent(externalReference)}&select=*`,
       {
         method: 'GET'
       }
     );
 
   return (
-    Array.isArray(dados) &&
-    dados.length
-      ? dados[0]
+    Array.isArray(rows) &&
+    rows.length
+      ? rows[0]
+      : null
+  );
+}
+
+async function buscarAssinaturaPorSubscriptionId(
+  subscriptionId
+) {
+  if (!subscriptionId) {
+    return null;
+  }
+
+  const rows =
+    await supabaseRequest(
+      `/rest/v1/ayro_assinaturas?mercado_pago_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=*`,
+      {
+        method: 'GET'
+      }
+    );
+
+  return (
+    Array.isArray(rows) &&
+    rows.length
+      ? rows[0]
       : null
   );
 }
@@ -2279,108 +2346,96 @@ async function buscarAssinaturaPorEmail(
     return null;
   }
 
-  const path =
-    '/rest/v1/assinaturas' +
-    `?email=eq.${encodeURIComponent(email)}` +
-    '&select=*' +
-    '&order=created_at.desc' +
-    '&limit=1';
-
-  const dados =
+  const rows =
     await supabaseRequest(
-      path,
+      `/rest/v1/ayro_assinaturas?email=eq.${encodeURIComponent(email)}&select=*&order=created_at.desc&limit=1`,
       {
         method: 'GET'
       }
     );
 
   return (
-    Array.isArray(dados) &&
-    dados.length
-      ? dados[0]
+    Array.isArray(rows) &&
+    rows.length
+      ? rows[0]
       : null
   );
 }
 
 async function atualizarAssinatura(
   id,
-  dados
+  patch
 ) {
   if (!id) {
-    throw new Error(
-      'ID da assinatura não informado.'
-    );
+    return null;
   }
 
-  const path =
-    '/rest/v1/assinaturas' +
-    `?id=eq.${encodeURIComponent(id)}`;
-
-  const resposta =
+  const rows =
     await supabaseRequest(
-      path,
+      `/rest/v1/ayro_assinaturas?id=eq.${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
 
-        headers: {
-          Prefer:
-            'return=representation'
-        },
-
         body:
-          JSON.stringify(dados)
+          JSON.stringify({
+            ...patch,
+            updated_at:
+              new Date().toISOString()
+          })
       }
     );
 
-  return resposta;
+  return (
+    Array.isArray(rows) &&
+    rows.length
+      ? rows[0]
+      : null
+  );
 }
 
-async function criarRegistroAssinatura(
-  dados
+async function atualizarProfile(
+  userId,
+  status,
+  acessoFim
 ) {
-  const resposta =
+  if (!userId) {
+    return null;
+  }
+
+  const patch = {
+    subscription_status:
+      status
+  };
+
+  if (
+    acessoFim !== undefined
+  ) {
+    patch.subscription_end =
+      acessoFim;
+  }
+
+  const rows =
     await supabaseRequest(
-      '/rest/v1/assinaturas',
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
       {
-        method: 'POST',
-
-        headers: {
-          Prefer:
-            'return=representation'
-        },
+        method: 'PATCH',
 
         body:
-          JSON.stringify(dados)
+          JSON.stringify(
+            patch
+          )
       }
     );
 
   return (
-    Array.isArray(resposta) &&
-    resposta.length
-      ? resposta[0]
-      : resposta
+    Array.isArray(rows) &&
+    rows.length
+      ? rows[0]
+      : null
   );
 }
 
-function gerarReferencia(
-  email
-) {
-  const hash =
-    crypto
-      .randomBytes(8)
-      .toString('hex');
-
-  return (
-    `ayro_${Date.now()}_${hash}_` +
-    String(email || '')
-      .toLowerCase()
-      .replace(
-        /[^a-z0-9]/g,
-        ''
-      )
-      .slice(0, 20)
-  );
-}function adicionarDias(
+function adicionarDias(
   dataBase,
   dias
 ) {
@@ -2430,44 +2485,46 @@ app.post(
         await supabaseRequest(
           '/rest/v1/ayro_assinaturas',
           {
-            method: 'POST',
+            method:
+              'POST',
 
-            body: JSON.stringify({
-              user_id:
-                user_id || null,
+            body:
+              JSON.stringify({
+                user_id:
+                  user_id || null,
 
-              email,
+                email,
 
-              plano:
-                'AYRO ACM Pro',
+                plano:
+                  'AYRO ACM Pro',
 
-              status:
-                'pending',
+                status:
+                  'pending',
 
-              metodo_pagamento:
-                'cartao_assinatura',
+                metodo_pagamento:
+                  'cartao_assinatura',
 
-              external_reference:
-                externalReference,
+                external_reference:
+                  externalReference,
 
-              valor:
-                49.90,
+                valor:
+                  49.90,
 
-              acesso_inicio:
-                null,
+                acesso_inicio:
+                  null,
 
-              acesso_fim:
-                null,
+                acesso_fim:
+                  null,
 
-              proximo_pagamento:
-                null,
+                proximo_pagamento:
+                  null,
 
-              created_at:
-                agora,
+                created_at:
+                  agora,
 
-              updated_at:
-                agora
-            })
+                updated_at:
+                  agora
+              })
           }
         );
 
@@ -2475,37 +2532,40 @@ app.post(
         await mpRequest(
           '/preapproval',
           {
-            method: 'POST',
+            method:
+              'POST',
 
-            body: JSON.stringify({
-              reason:
-                'AYRO ACM Pro',
+            body:
+              JSON.stringify({
+                reason:
+                  'AYRO ACM Pro',
 
-              external_reference:
-                externalReference,
+                external_reference:
+                  externalReference,
 
-              payer_email:
-                email,
+                payer_email:
+                  email,
 
-              auto_recurring: {
-                frequency: 1,
+                auto_recurring: {
+                  frequency:
+                    1,
 
-                frequency_type:
-                  'months',
+                  frequency_type:
+                    'months',
 
-                transaction_amount:
-                  49.90,
+                  transaction_amount:
+                    49.90,
 
-                currency_id:
-                  'BRL'
-              },
+                  currency_id:
+                    'BRL'
+                },
 
-              back_url:
-                'https://ayro-acm-api-prod.onrender.com',
+                back_url:
+                  'https://ayro-acm-api-prod.onrender.com',
 
-              status:
-                'pending'
-            })
+                status:
+                  'pending'
+              })
           }
         );
 
@@ -2536,7 +2596,8 @@ app.post(
       }
 
       return res.json({
-        sucesso: true,
+        sucesso:
+          true,
 
         assinatura_id:
           assinatura.id,
@@ -2550,6 +2611,7 @@ app.post(
         external_reference:
           externalReference
       });
+
     } catch (erro) {
       console.error(
         'Erro ao criar assinatura:',
@@ -2573,9 +2635,7 @@ app.post(
 
 /* ==========================================
    CRIAR PAGAMENTO PIX
-========================================== */
-
-app.post(
+========================================== */app.post(
   '/api/mercadopago/criar-pix',
   async (req, res) => {
     try {
@@ -2750,6 +2810,7 @@ app.post(
           transacao.ticket_url ||
           null
       });
+
     } catch (erro) {
       console.error(
         'Erro ao criar Pix:',
@@ -2816,6 +2877,7 @@ app.get(
         external_reference:
           pagamento.external_reference
       });
+
     } catch (erro) {
       console.error(
         'Erro ao consultar pagamento:',
@@ -2831,6 +2893,185 @@ app.get(
     }
   }
 );
+
+/* ==========================================
+   CONSULTAR ASSINATURA
+========================================== */
+
+app.get(
+  '/api/mercadopago/assinatura/:id',
+  async (req, res) => {
+    try {
+      const id =
+        String(
+          req.params.id || ''
+        ).trim();
+
+      if (!id) {
+        return res
+          .status(400)
+          .json({
+            erro:
+              'ID da assinatura não informado.'
+          });
+      }
+
+      const dados =
+        await mpGet(
+          `/preapproval/${encodeURIComponent(id)}`
+        );
+
+      return res.json({
+        sucesso: true,
+
+        id:
+          dados.id,
+
+        status:
+          dados.status,
+
+        payer_email:
+          dados.payer_email,
+
+        external_reference:
+          dados.external_reference,
+
+        next_payment_date:
+          dados.next_payment_date ||
+          null
+      });
+
+    } catch (erro) {
+      console.error(
+        'Erro ao consultar assinatura:',
+        erro.dados || erro
+      );
+
+      return res
+        .status(500)
+        .json({
+          erro:
+            'Não foi possível consultar a assinatura.'
+        });
+    }
+  }
+);
+
+/* ==========================================
+   PROCESSAR ASSINATURA
+========================================== */
+
+async function processarPreapproval(
+  dataId
+) {
+  const assinatura =
+    await mpGet(
+      `/preapproval/${encodeURIComponent(dataId)}`
+    );
+
+  let registro =
+    await buscarAssinaturaPorReferencia(
+      assinatura.external_reference
+    );
+
+  if (!registro) {
+    registro =
+      await buscarAssinaturaPorSubscriptionId(
+        assinatura.id
+      );
+  }
+
+  if (!registro) {
+    console.log(
+      'Assinatura MP sem registro correspondente:',
+      assinatura.id
+    );
+
+    return;
+  }
+
+  const status =
+    String(
+      assinatura.status || ''
+    ).toLowerCase();
+
+  const ativa =
+    [
+      'authorized',
+      'active'
+    ].includes(status);
+
+  const encerrada =
+    [
+      'cancelled',
+      'canceled',
+      'paused'
+    ].includes(status);
+
+  const acessoInicio =
+    ativa
+      ? (
+          registro.acesso_inicio ||
+          new Date().toISOString()
+        )
+      : registro.acesso_inicio;
+
+  const acessoFim =
+    ativa
+      ? (
+          assinatura.next_payment_date ||
+          registro.acesso_fim ||
+          null
+        )
+      : registro.acesso_fim;
+
+  await atualizarAssinatura(
+    registro.id,
+    {
+      status:
+        assinatura.status ||
+        registro.status,
+
+      metodo_pagamento:
+        'cartao_assinatura',
+
+      mercado_pago_subscription_id:
+        String(
+          assinatura.id || ''
+        ),
+
+      acesso_inicio:
+        acessoInicio ||
+        null,
+
+      acesso_fim:
+        acessoFim ||
+        null,
+
+      proximo_pagamento:
+        assinatura.next_payment_date ||
+        null
+    }
+  );
+
+  if (registro.user_id) {
+    if (ativa) {
+      await atualizarProfile(
+        registro.user_id,
+        'active',
+        acessoFim || null
+      );
+    }
+
+    if (encerrada) {
+      await atualizarProfile(
+        registro.user_id,
+        'inactive',
+        acessoFim || null
+      );
+    }
+  }
+}
 
 /* ==========================================
    PROCESSAR PAGAMENTO
@@ -2885,6 +3126,14 @@ async function processarPagamento(
       pagamento.transaction_amount
     );
 
+  /*
+    PIX:
+    Só libera quando:
+    - aprovado
+    - realmente Pix
+    - exatamente R$ 49,90
+  */
+
   if (
     status === 'approved' &&
     metodo === 'pix' &&
@@ -2892,6 +3141,13 @@ async function processarPagamento(
       valor - 49.90
     ) < 0.01
   ) {
+
+    /*
+      IDEMPOTÊNCIA:
+      Se este payment_id já foi processado,
+      não acrescenta outros 30 dias.
+    */
+
     if (
       String(
         registro.mercado_pago_payment_id ||
@@ -2997,167 +3253,15 @@ async function processarPagamento(
         null
     }
   );
-}/* ==========================================
-   CONSULTAR ASSINATURA
-========================================== */
-
-app.get(
-  '/api/mercadopago/assinatura/:id',
-  async (req, res) => {
-    try {
-      const id = String(req.params.id || '').trim();
-
-      if (!id) {
-        return res.status(400).json({
-          erro: 'ID da assinatura não informado.'
-        });
-      }
-
-      const dados = await mpGet(
-        `/preapproval/${encodeURIComponent(id)}`
-      );
-
-      return res.json({
-        sucesso: true,
-        id: dados.id,
-        status: dados.status,
-        payer_email: dados.payer_email,
-        external_reference: dados.external_reference,
-        next_payment_date: dados.next_payment_date || null
-      });
-
-    } catch (erro) {
-      console.error(
-        'Erro ao consultar assinatura:',
-        erro.dados || erro
-      );
-
-      return res.status(500).json({
-        erro: 'Não foi possível consultar a assinatura.'
-      });
-    }
-  }
-);
-
-/* ==========================================
-   PROCESSAR ASSINATURA
-========================================== */
-
-async function processarPreapproval(dataId) {
-
-  const assinatura = await mpGet(
-    `/preapproval/${encodeURIComponent(dataId)}`
-  );
-
-  let registro =
-    await buscarAssinaturaPorReferencia(
-      assinatura.external_reference
-    );
-
-  if (!registro) {
-    registro =
-      await buscarAssinaturaPorSubscriptionId(
-        assinatura.id
-      );
-  }
-
-  if (!registro) {
-    console.log(
-      'Assinatura MP sem registro correspondente:',
-      assinatura.id
-    );
-
-    return;
-  }
-
-  const status =
-    String(
-      assinatura.status || ''
-    ).toLowerCase();
-
-  const ativa =
-    [
-      'authorized',
-      'active'
-    ].includes(status);
-
-  const encerrada =
-    [
-      'cancelled',
-      'canceled',
-      'paused'
-    ].includes(status);
-
-  const acessoInicio =
-    ativa
-      ? (
-          registro.acesso_inicio ||
-          new Date().toISOString()
-        )
-      : registro.acesso_inicio;
-
-  const acessoFim =
-    ativa
-      ? (
-          assinatura.next_payment_date ||
-          registro.acesso_fim ||
-          null
-        )
-      : registro.acesso_fim;
-
-  await atualizarAssinatura(
-    registro.id,
-    {
-      status:
-        assinatura.status ||
-        registro.status,
-
-      metodo_pagamento:
-        'cartao_assinatura',
-
-      mercado_pago_subscription_id:
-        String(
-          assinatura.id || ''
-        ),
-
-      acesso_inicio:
-        acessoInicio || null,
-
-      acesso_fim:
-        acessoFim || null,
-
-      proximo_pagamento:
-        assinatura.next_payment_date ||
-        null
-    }
-  );
-
-  if (registro.user_id) {
-
-    if (ativa) {
-      await atualizarProfile(
-        registro.user_id,
-        'active',
-        acessoFim || null
-      );
-    }
-
-    if (encerrada) {
-      await atualizarProfile(
-        registro.user_id,
-        'inactive',
-        acessoFim || null
-      );
-    }
-  }
 }
 
 /* ==========================================
    VALIDAÇÃO DO WEBHOOK MERCADO PAGO
 ========================================== */
 
-function validarAssinaturaWebhook(req) {
-
+function validarAssinaturaWebhook(
+  req
+) {
   const secret =
     process.env.MP_WEBHOOK_SECRET;
 
@@ -3171,24 +3275,30 @@ function validarAssinaturaWebhook(req) {
 
   const xSignature =
     String(
-      req.headers['x-signature'] || ''
+      req.headers[
+        'x-signature'
+      ] || ''
     );
 
   const xRequestId =
     String(
-      req.headers['x-request-id'] || ''
+      req.headers[
+        'x-request-id'
+      ] || ''
     );
 
-  if (!xSignature || !xRequestId) {
+  if (
+    !xSignature ||    !xRequestId
+  ) {
     return false;
   }
 
   const partes = {};
 
   for (
-    const parte of xSignature.split(',')
+    const parte of
+    xSignature.split(',')
   ) {
-
     const [
       chave,
       ...resto
@@ -3209,7 +3319,10 @@ function validarAssinaturaWebhook(req) {
   const recebido =
     partes.v1;
 
-  if (!ts || !recebido) {
+  if (
+    !ts ||
+    !recebido
+  ) {
     return false;
   }
 
@@ -3238,7 +3351,6 @@ function validarAssinaturaWebhook(req) {
       .digest('hex');
 
   try {
-
     const a =
       Buffer.from(
         esperado,
@@ -3258,7 +3370,6 @@ function validarAssinaturaWebhook(req) {
         b
       )
     );
-
   } catch {
     return false;
   }
@@ -3271,13 +3382,12 @@ function validarAssinaturaWebhook(req) {
 app.post(
   '/api/mercadopago/webhook',
   async (req, res) => {
-
     try {
-
       if (
-        !validarAssinaturaWebhook(req)
+        !validarAssinaturaWebhook(
+          req
+        )
       ) {
-
         console.warn(
           'Webhook Mercado Pago com assinatura inválida.'
         );
@@ -3285,7 +3395,8 @@ app.post(
         return res
           .status(401)
           .json({
-            erro: 'Assinatura inválida.'
+            erro:
+              'Assinatura inválida.'
           });
       }
 
@@ -3330,7 +3441,6 @@ app.post(
         tipo ===
           'preapproval'
       ) {
-
         await processarPreapproval(
           dataId
         );
@@ -3341,7 +3451,6 @@ app.post(
       if (
         tipo === 'payment'
       ) {
-
         await processarPagamento(
           dataId
         );
@@ -3353,7 +3462,6 @@ app.post(
         tipo ===
         'subscription_authorized_payment'
       ) {
-
         const fatura =
           await mpGet(
             `/authorized_payments/${encodeURIComponent(dataId)}`
@@ -3362,7 +3470,6 @@ app.post(
         if (
           fatura.preapproval_id
         ) {
-
           await processarPreapproval(
             fatura.preapproval_id
           );
@@ -3378,14 +3485,13 @@ app.post(
       );
 
     } catch (erro) {
-
       console.error(
         'Erro ao processar webhook:',
-        erro.dados || erro
+        erro.dados ||
+        erro
       );
 
       if (!res.headersSent) {
-
         return res
           .status(500)
           .json({
@@ -3404,9 +3510,7 @@ app.post(
 app.post(
   '/api/ativar-conta-pix',
   async (req, res) => {
-
     try {
-
       const email =
         String(
           req.body?.email || ''
@@ -3428,7 +3532,6 @@ app.post(
         !email ||
         !paymentId
       ) {
-
         return res
           .status(400)
           .json({
@@ -3440,7 +3543,6 @@ app.post(
       if (
         password.length < 6
       ) {
-
         return res
           .status(400)
           .json({
@@ -3461,8 +3563,7 @@ app.post(
 
       const metodo =
         String(
-          pagamento?.payment_method_id ||
-          ''
+          pagamento?.payment_method_id || ''
         ).toLowerCase();
 
       const valor =
@@ -3479,8 +3580,7 @@ app.post(
 
       const ref =
         String(
-          pagamento?.external_reference ||
-          ''
+          pagamento?.external_reference || ''
         );
 
       if (
@@ -3494,7 +3594,6 @@ app.post(
           payerEmail !== email
         )
       ) {
-
         return res
           .status(403)
           .json({
@@ -3509,7 +3608,6 @@ app.post(
         );
 
       if (!registro) {
-
         return res
           .status(404)
           .json({
@@ -3523,10 +3621,8 @@ app.post(
           registro.email || ''
         )
           .trim()
-          .toLowerCase()
-          !== email
+          .toLowerCase() !== email
       ) {
-
         return res
           .status(403)
           .json({
@@ -3538,10 +3634,8 @@ app.post(
       if (
         String(
           registro.status || ''
-        ).toLowerCase()
-        !== 'active'
+        ).toLowerCase() !== 'active'
       ) {
-
         await processarPagamento(
           paymentId
         );
@@ -3562,12 +3656,10 @@ app.post(
       if (
         String(
           registroAtual?.status || ''
-        ).toLowerCase()
-          !== 'active' ||
+        ).toLowerCase() !== 'active' ||
         !fim ||
         fim <= new Date()
       ) {
-
         return res
           .status(403)
           .json({
@@ -3603,7 +3695,8 @@ app.post(
       );
 
       return res.json({
-        sucesso: true,
+        sucesso:
+          true,
 
         email,
 
@@ -3615,7 +3708,6 @@ app.post(
       });
 
     } catch (erro) {
-
       console.error(
         'Erro ao ativar conta Pix:',
         erro.dados || erro
@@ -3644,22 +3736,21 @@ app.post(
 app.get(
   '/api/acesso/:email',
   async (req, res) => {
-
     try {
-
       const email =
         String(
-          req.params.email || ''
+          req.params.email ||
+          ''
         )
           .trim()
           .toLowerCase();
 
       if (!email) {
-
         return res
           .status(400)
           .json({
             ativo: false,
+
             erro:
               'E-mail não informado.'
           });
@@ -3671,9 +3762,10 @@ app.get(
         );
 
       if (!registro) {
-
         return res.json({
-          ativo: false,
+          ativo:
+            false,
+
           status:
             'sem_assinatura'
         });
@@ -3691,7 +3783,8 @@ app.get(
 
       const status =
         String(
-          registro.status || ''
+          registro.status ||
+          ''
         ).toLowerCase();
 
       let ativo = false;
@@ -3700,14 +3793,12 @@ app.get(
         registro.metodo_pagamento ===
         'pix'
       ) {
-
         ativo =
           status === 'active' &&
           fim &&
           fim > agora;
 
       } else {
-
         ativo =
           [
             'active',
@@ -3727,7 +3818,6 @@ app.get(
         fim &&
         fim <= agora
       ) {
-
         await atualizarAssinatura(
           registro.id,
           {
@@ -3736,10 +3826,7 @@ app.get(
           }
         );
 
-        if (
-          registro.user_id
-        ) {
-
+        if (registro.user_id) {
           await atualizarProfile(
             registro.user_id,
             'inactive',
@@ -3779,7 +3866,6 @@ app.get(
       });
 
     } catch (erro) {
-
       console.error(
         'Erro ao verificar acesso:',
         erro
@@ -3788,7 +3874,8 @@ app.get(
       return res
         .status(500)
         .json({
-          ativo: false,
+          ativo:
+            false,
 
           erro:
             'Não foi possível verificar o acesso.'
@@ -3804,9 +3891,9 @@ app.get(
 app.get(
   '/',
   (req, res) => {
-
     res.json({
-      ok: true,
+      ok:
+        true,
 
       sistema:
         'AYRO ACM Pro',
@@ -3839,11 +3926,9 @@ const PORT =
 if (
   require.main === module
 ) {
-
   app.listen(
     PORT,
     () => {
-
       console.log(
         `AYRO ACM API PRECISAO-V12-MP rodando na porta ${PORT}`
       );
