@@ -730,13 +730,13 @@ async function openSearches(){
  const city=document.getElementById('city').value.trim(),state=document.getElementById('state').value.trim(),bairro=document.getElementById('bairro').value.trim(),type=document.getElementById('type').value;
  const beds=document.getElementById('beds').value,area=document.getElementById('area').value,suites=document.getElementById('suites').value,parking=document.getElementById('parking').value;
  const condo=document.getElementById('condo').value,condition=document.getElementById('condition').selectedOptions?.[0]?.text||'',features=document.getElementById('features').value.trim();
- const pool=document.getElementById('pool')?.value||'nao',sauna=document.getElementById('sauna')?.value||'nao',dependency=document.getElementById('dependency')?.value||'nao';
+ const pool=document.getElementById('pool')?.value||'nao',sauna=document.getElementById('sauna')?.value||'nao';
  if(!city){alert('Cidade é obrigatória.');document.getElementById('city').focus();return}
  if(!bairro){alert('Bairro é obrigatório.');document.getElementById('bairro').focus();return}
- const extras=[suites?suites+' suítes':'',parking?parking+' vagas':'',pool==='sim'?'piscina':'',sauna==='sim'?'sauna':'',dependency==='sim'?'dependência':'',features].filter(Boolean).join(' ');
+ const extras=[suites?suites+' suítes':'',parking?parking+' vagas':'',pool==='sim'?'piscina':'',sauna==='sim'?'sauna':'',features].filter(Boolean).join(' ');
  const busca=`${type} à venda ${bairro} ${city} ${state} ${beds ? beds+' quartos' : ''} ${area ? area+' m²' : ''} ${extras}`.trim();
  const API=AYRO_API_URL;
- const params=new URLSearchParams({q:busca,cidade:city,bairro,tipo:type,area,quartos:beds,suites,vagas:parking,condominio:condo,conservacao:condition,piscina:pool,sauna,diferenciais:[dependency==='sim'?'dependência':'',features].filter(Boolean).join(', ')});
+ const params=new URLSearchParams({q:busca,cidade:city,bairro,tipo:type,area,quartos:beds,suites,vagas:parking,condominio:condo,conservacao:condition,piscina:pool,sauna,diferenciais:features});
  const status=document.getElementById('searchStatus'),results=document.getElementById('searchResults'),btn=document.getElementById('searchComparablesBtn');
  if(status){status.style.display='block';status.textContent='AYRO está buscando e classificando os imóveis mais semelhantes...';}
  if(results)results.innerHTML='';
