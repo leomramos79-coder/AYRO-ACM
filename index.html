@@ -138,6 +138,25 @@ td input,td select{padding:8px}
   .ayro-pdf-export #report p,.ayro-pdf-export .technical-report p,.ayro-pdf-export .report-values p{break-inside:avoid!important;page-break-inside:avoid!important;}
   .ayro-pdf-export table{width:100%!important;font-size:9px!important;}
 
+
+  /* AYRO PDF: correção exclusiva de cortes entre páginas */
+  .ayro-pdf-export .kpi,
+  .ayro-pdf-export .statbar,
+  .ayro-pdf-export .statbar > div,
+  .ayro-pdf-export #apiResults .card > div,
+  .ayro-pdf-export details,
+  .ayro-pdf-export summary,
+  .ayro-pdf-export tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .ayro-pdf-export #report p,
+  .ayro-pdf-export .technical-report p {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    orphans: 4;
+    widows: 4;
+  }
 </style>
 
 <!-- AYRO ACM: Supabase -->
@@ -752,6 +771,48 @@ async function buildPDFBlob(){
   clone.classList.add('ayro-pdf-export');
   clone.style.display='block';
   clone.querySelectorAll('.no-print').forEach(el=>el.remove());
+
+  // PDF: substitui SOMENTE o formulário de dados do imóvel por um resumo profissional.
+  // A tela do aplicativo e todos os cálculos permanecem inalterados.
+  const pdfOwner = document.getElementById('owner')?.value?.trim() || '';
+  const pdfCity = document.getElementById('city')?.value?.trim() || '';
+  const pdfState = document.getElementById('state')?.value?.trim() || '';
+  const pdfBairro = document.getElementById('bairro')?.value?.trim() || '';
+  const pdfType = document.getElementById('type')?.selectedOptions?.[0]?.textContent || document.getElementById('type')?.value || 'Imóvel';
+  const pdfArea = document.getElementById('area')?.value || '';
+  const pdfLand = document.getElementById('land')?.value || '';
+  const pdfBeds = document.getElementById('beds')?.value || '0';
+  const pdfSuites = document.getElementById('suites')?.value || '0';
+  const pdfBaths = document.getElementById('baths')?.value || '0';
+  const pdfParking = document.getElementById('parking')?.value || '0';
+  const pdfCondition = document.getElementById('condition')?.selectedOptions?.[0]?.textContent || '';
+  const pdfDependency = document.getElementById('dependency')?.value === 'sim';
+  const pdfFeatures = document.getElementById('features')?.value?.trim() || '';
+  const pdfFormCard = clone.querySelector('#owner')?.closest('.card');
+  if(pdfFormCard){
+    const item=(icon,text)=>`<div style="display:flex;align-items:center;gap:7px;white-space:nowrap"><span style="font-size:15px">${icon}</span><span>${text}</span></div>`;
+    const details=[
+      item('🛏️', `<b>${pdfBeds}</b> ${Number(pdfBeds)===1?'quarto':'quartos'}`),
+      Number(pdfSuites)>0 ? item('◈', `<b>${pdfSuites}</b> ${Number(pdfSuites)===1?'suíte':'suítes'}`) : '',
+      item('🚿', `<b>${pdfBaths}</b> ${Number(pdfBaths)===1?'banheiro':'banheiros'}`),
+      item('🚗', `<b>${pdfParking}</b> ${Number(pdfParking)===1?'vaga':'vagas'}`),
+      pdfArea ? item('📐', `<b>${pdfArea} m²</b> de área`) : '',
+      Number(pdfLand)>0 ? item('▱', `<b>${pdfLand} m²</b> de terreno`) : '',
+      pdfCondition ? item('🏠', `<b>${pdfCondition}</b>`) : '',
+      pdfDependency ? item('✓', '<b>Com dependência</b>') : ''
+    ].filter(Boolean).join('');
+    pdfFormCard.innerHTML=`
+      <div style="padding:4px 2px 6px">
+        ${pdfOwner?`<div style="font-size:11px;color:#666;margin-bottom:5px">Imóvel de ${pdfOwner}</div>`:''}
+        <div style="font-size:21px;font-weight:900;letter-spacing:.2px;text-transform:uppercase;line-height:1.2">${pdfType}${pdfBairro?' • '+pdfBairro:''}</div>
+        <div style="font-size:12px;color:#666;margin-top:5px">📍 ${[pdfCity,pdfState].filter(Boolean).join(' – ')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 20px;margin-top:14px;padding:12px 0;border-top:1px solid #e5e5e5;border-bottom:1px solid #e5e5e5;font-size:12px">${details}</div>
+        ${pdfFeatures?`<div style="margin-top:10px;font-size:11px;color:#555"><b>Diferenciais:</b> ${pdfFeatures}</div>`:''}
+      </div>`;
+    pdfFormCard.style.breakInside='avoid';
+    pdfFormCard.style.pageBreakInside='avoid';
+  }
+
   clone.querySelectorAll('input,select,textarea').forEach(el=>{
     const span=document.createElement('span');
     span.textContent=el.tagName==='SELECT' ? (el.selectedOptions?.[0]?.textContent||el.value) : el.value;
@@ -768,7 +829,7 @@ async function buildPDFBlob(){
       image:{type:'jpeg',quality:0.98},
       html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',scrollY:0},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-      pagebreak:{mode:['css','legacy'],before:[],after:[],avoid:['.kpi','.statbar>div','.report-values p','tr']}
+      pagebreak:{mode:['avoid-all','css','legacy'],before:[],after:[],avoid:['.card','.kpi','.statbar','.statbar>div','#apiResults .card > div','details','summary','.report-values p','#report p','.technical-report p','tr']}
     };
     return await html2pdf().set(opt).from(clone).outputPdf('blob');
   } finally { holder.remove(); }
