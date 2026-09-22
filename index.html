@@ -112,7 +112,21 @@ td input,td select{padding:8px}
   input,select,textarea{min-width:0;max-width:100%}
   table{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 }
-@media print{.sidebar,.top,.no-print{display:none!important}.app{display:block}body{background:#fff}.content{padding:0;max-width:none}.page{display:none!important}#page-acm{display:block!important}.card{box-shadow:none;break-inside:avoid}}
+@media print{
+  .sidebar,.top,.no-print{display:none!important}
+  .app{display:block}
+  body{background:#fff}
+  .content{padding:0;max-width:none}
+  .page{display:none!important}
+  #page-acm{display:block!important}
+  .card{box-shadow:none}
+  #page-acm .card:not(.report){break-inside:avoid;page-break-inside:avoid}
+  #page-acm .card.report{break-inside:auto!important;page-break-inside:auto!important;overflow:visible!important}
+  #report,.technical-report{display:block!important;overflow:visible!important;height:auto!important;max-height:none!important;break-inside:auto!important;page-break-inside:auto!important}
+  #report p,.technical-report p{break-inside:avoid;page-break-inside:avoid;orphans:3;widows:3}
+  .report-values p{break-inside:avoid;page-break-inside:avoid}
+  .report-note{font-size:11px;line-height:1.5}
+}
 </style>
 
 <!-- AYRO ACM: Supabase -->
@@ -618,7 +632,18 @@ function calculate(){
   document.getElementById('statCount').textContent=filtered.length;
   document.getElementById('confidence').textContent=confidence;
   const owner=document.getElementById('owner').value||'proprietário',bairro=document.getElementById('bairro').value||'bairro informado',city=document.getElementById('city').value,type=document.getElementById('type').value,dependency=document.getElementById('dependency')?.value||'nao';
-  document.getElementById('report').innerHTML=`<p>Para o imóvel de <strong>${owner}</strong>, localizado em <strong>${bairro}, ${city}</strong>, foram considerados <strong>${filtered.length} imóveis comparáveis</strong>. O imóvel avaliado é um <strong>${type.toLowerCase()}</strong> com <strong>${area} m²</strong>${dependency==='sim'?', com <strong>dependência</strong>':''}. A referência ponderada encontrada foi de <strong>R$ ${NUM.format(base)}/m²</strong>.</p><p>O valor central recomendado para este ${type.toLowerCase()} é <strong>${BRL.format(round5(market))}</strong>. Para maior liquidez, a estratégia indicada é próxima de <strong>${BRL.format(round5(quick))}</strong>. Para posicionamento superior, com maior margem de negociação e potencial aumento do prazo de venda, a referência é <strong>${BRL.format(round5(upper))}</strong>.</p><p>Esta ACM representa opinião mercadológica baseada em preços anunciados e características comparáveis. Não substitui laudo técnico formal quando este for legalmente exigido.</p>`;
+  document.getElementById('report').innerHTML=`
+    <div class="technical-report">
+      <p><strong>Fundamentação da análise.</strong> A presente Análise Comparativa de Mercado foi elaborada a partir das características informadas do imóvel avaliando e dos elementos comparativos considerados válidos na pesquisa. Para o imóvel de <strong>${owner}</strong>, localizado em <strong>${bairro}, ${city}</strong>, foram utilizados <strong>${filtered.length} imóveis comparáveis</strong>. O bem analisado é um <strong>${type.toLowerCase()}</strong> com <strong>${area} m²</strong>${dependency==='sim'?', com <strong>dependência</strong>':''}.</p>
+      <p>Na formação da referência de mercado foram considerados os preços de oferta dos comparáveis, seus valores unitários por metro quadrado e o grau de aderência às características do imóvel avaliando. A referência ponderada obtida foi de <strong>R$ ${NUM.format(base)}/m²</strong>, com nível de confiança <strong>${confidence.toLowerCase()}</strong>. A partir dessa referência e da área informada, o sistema estabeleceu o valor central e as faixas de posicionamento comercial.</p>
+      <div class="report-values">
+        <p><strong>Venda Rápida — ${BRL.format(round5(quick))}</strong><br>Faixa indicada para uma estratégia de maior liquidez, buscando tornar o imóvel mais competitivo em relação às ofertas comparáveis e reduzir o tempo potencial de exposição no mercado.</p>
+        <p><strong>Valor de Mercado Recomendado — ${BRL.format(round5(market))}</strong><br>É a referência central desta ACM. O valor foi estimado a partir do valor unitário ponderado de <strong>R$ ${NUM.format(base)}/m²</strong>, aplicado à área do imóvel e confrontado com os <strong>${filtered.length} comparáveis</strong> considerados na amostra. Essa faixa procura representar o posicionamento comercial mais compatível com os dados analisados.</p>
+        <p><strong>Posicionamento Superior — ${BRL.format(round5(upper))}</strong><br>Faixa destinada a um posicionamento comercial superior, preservando maior margem para negociação. Esse posicionamento pode resultar em prazo de comercialização maior, dependendo da procura, da concorrência e dos diferenciais efetivamente percebidos pelo mercado.</p>
+      </div>
+      <p><strong>Conclusão técnica.</strong> Considerando a localização, tipologia, área, características informadas${dependency==='sim'?', incluindo a existência de dependência':''}, os elementos comparativos selecionados e o tratamento dos valores unitários, conclui-se que o <strong>Valor de Mercado Recomendado é ${BRL.format(round5(market))}</strong>. Para estratégias distintas de comercialização, esta análise indica <strong>${BRL.format(round5(quick))}</strong> para Venda Rápida e <strong>${BRL.format(round5(upper))}</strong> para Posicionamento Superior.</p>
+      <p class="report-note">Os valores apresentados constituem estimativa mercadológica baseada nas informações e ofertas disponíveis na data da análise. O preço efetivamente negociado poderá variar em razão do estado de conservação, padrão construtivo, posição, vista, incidência solar, benfeitorias, documentação, condições de pagamento, oferta e demanda e demais particularidades do imóvel. Esta ACM não substitui laudo técnico formal quando este for legalmente exigido.</p>
+    </div>`;
   lastResult={base,quick:round5(quick),market:round5(market),upper:round5(upper),confidence,count:filtered.length,cv};
   return lastResult;
 }
