@@ -895,13 +895,10 @@ async function restoreAyroSession(){
       if(error) console.warn('AYRO recovery code:',error.message||error);
     }
 
-    const {data}=await client.auth.getSession();
-    const recoverySession=!!data?.session;
-
-    // O AYRO não mantém login automático entre carregamentos. Portanto,
-    // uma sessão recebida ao abrir esta página é a sessão temporária do
-    // link de recuperação/criação de senha enviado por e-mail.
-    if(recoveryLink || recoverySession){
+    // O formulário de nova senha só pode aparecer quando a página foi
+    // aberta por um link real de recuperação/criação de senha.
+    // Uma sessão antiga do Supabase, sozinha, não deve exibir esses campos.
+    if(recoveryLink){
       openRecoveryMode();
       return;
     }
